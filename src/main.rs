@@ -27,6 +27,8 @@ fn main() {
 
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
 
+    info!("successfully initialized GLFW");
+
     glfw.window_hint(glfw::WindowHint::Samples(Option::Some(4)));
     glfw.window_hint(glfw::WindowHint::ContextVersionMajor(3));
     glfw.window_hint(glfw::WindowHint::ContextVersionMinor(3));
@@ -37,6 +39,8 @@ fn main() {
         .create_window(300, 300, "terrain-generator", glfw::WindowMode::Windowed)
         .expect("Failed to create GLFW window.");
 
+    info!("successfully created window");
+
     window.set_key_polling(true);
     window.make_current();
 
@@ -46,6 +50,8 @@ fn main() {
     let fs = shaders::compile_shader("./shaders/white.frag", gl::FRAGMENT_SHADER);
 
     let program = shaders::link_program(vs, fs);
+
+    info!("successfully created shaders/program");
 
     let mut vao = 0;
     let mut vbo = 0;
@@ -76,6 +82,9 @@ fn main() {
                                 gl::FALSE as GLboolean, 0, ptr::null());
     }
 
+    info!("successfully initialized static data");
+    info!("beginning event loop");
+
     while !window.should_close() {
         unsafe {
             // Clear the screen to black
@@ -99,7 +108,8 @@ fn main() {
 fn handle_window_event(window: &mut glfw::Window, event: glfw::WindowEvent) {
     match event {
         glfw::WindowEvent::Key(glfw::Key::Escape, _, glfw::Action::Press, _) => {
-            window.set_should_close(true)
+            info!("received esc key, will close window");
+            window.set_should_close(true);
         }
         _ => {}
     }
