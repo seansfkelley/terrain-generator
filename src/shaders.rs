@@ -9,6 +9,8 @@ use std::io::Read;
 use gl::types::*;
 
 pub fn compile_shader(filename: &str, type_: GLenum) -> GLuint {
+    info!("loading shader from {} of type 0x{:X}", filename, type_);
+
     let mut shader_src: String = String::new();
     fs::File::open(filename).unwrap().read_to_string(&mut shader_src).unwrap();
     let shader_src_c_str = CString::new(shader_src.as_bytes()).unwrap().into_raw();
@@ -22,7 +24,6 @@ pub fn compile_shader(filename: &str, type_: GLenum) -> GLuint {
         let mut status = gl::FALSE as GLint;
         gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut status);
 
-
         if status != (gl::TRUE as GLint) {
             let mut len = 0;
             gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
@@ -33,16 +34,18 @@ pub fn compile_shader(filename: &str, type_: GLenum) -> GLuint {
         }
     }
 
+    info!("successfully generated shader for {} with id {}", filename, shader);
     return shader;
 }
 
-pub fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
+pub fn link_program(vertex_shader: GLuint, fragment_shader: GLuint) -> GLuint {
+    info!("creating program with vertex shader {} and fragment shader {}", vertex_shader, fragment_shader);
 
     unsafe {
         let program = gl::CreateProgram();
 
-        gl::AttachShader(program, vs);
-        gl::AttachShader(program, fs);
+        gl::AttachShader(program, vertex_shader);
+        gl::AttachShader(program, fragment_shader);
         gl::LinkProgram(program);
         // Get the link status
         let mut status = gl::FALSE as GLint;
@@ -58,6 +61,7 @@ pub fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
             panic!("{}", str::from_utf8(buf.as_slice()).ok().expect("ProgramInfoLog not valid utf8"));
         }
 
+        info!("successfully created program with id {}", program);
         return program;
     }
 }

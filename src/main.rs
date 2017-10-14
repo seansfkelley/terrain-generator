@@ -3,6 +3,9 @@
 extern crate glfw;
 extern crate gl;
 extern crate libc;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
 
 mod shaders;
 
@@ -20,6 +23,8 @@ static VERTEX_DATA: [GLfloat; 6] = [
 ];
 
 fn main() {
+    env_logger::init().unwrap();
+
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
 
     glfw.window_hint(glfw::WindowHint::Samples(Option::Some(4)));
