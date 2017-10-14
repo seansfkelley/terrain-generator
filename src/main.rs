@@ -2,16 +2,19 @@
 
 extern crate glfw;
 extern crate gl;
+extern crate glm;
 extern crate libc;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+extern crate num_traits;
 
 mod shaders;
 
 use std::mem;
 use std::ptr;
 use std::ffi::CString;
+use num_traits::identities::One;
 use glfw::Context;
 use gl::types::*;
 
@@ -21,6 +24,9 @@ static VERTEX_DATA: [GLfloat; 6] = [
     0.5, -0.5,
     -0.5, -0.5
 ];
+
+static WIDTH: u32 = 400;
+static HEIGHT: u32 = 300;
 
 fn main() {
     env_logger::init().unwrap();
@@ -36,7 +42,7 @@ fn main() {
     glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
 
     let (mut window, events) = glfw
-        .create_window(300, 300, "terrain-generator", glfw::WindowMode::Windowed)
+        .create_window(WIDTH, HEIGHT, "terrain-generator", glfw::WindowMode::Windowed)
         .expect("Failed to create GLFW window.");
 
     info!("successfully created window");
@@ -55,6 +61,16 @@ fn main() {
 
     let mut vao = 0;
     let mut vbo = 0;
+
+    let projection = glm::ext::perspective(glm::builtin::radians(45.0), (WIDTH as f32) / (HEIGHT as f32), 0.1, 100.0);
+    let view = glm::ext::look_at(
+        glm::Vec3::new(4.0, 3.0, 3.0),
+        glm::Vec3::new(0.0, 0.0, 0.0),
+        glm::Vec3::new(0.0, 1.0, 0.0)
+    );
+    let model = glm::Mat4::one();
+
+    let mvp = projection * view * model;
 
     unsafe {
         // VAO
