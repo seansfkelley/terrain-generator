@@ -117,7 +117,7 @@ fn main() {
     );
     let model = glm::Mat4::one();
 
-    let mvp = model;
+    let mvp = projection * view * model;
     let mut mvp_array = Vec::new();
 
     for i in 0..4 {
@@ -126,13 +126,7 @@ fn main() {
         }
     }
 
-    println!("{:?}", mvp_array);
-
     unsafe {
-        // MVP
-        let matrix_id = gl::GetUniformLocation(program, to_c_str("mvp"));
-        gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, mvp_array.as_ptr());
-
         // VAO
         gl::GenVertexArrays(1, &mut vao);
         gl::BindVertexArray(vao);
@@ -148,6 +142,11 @@ fn main() {
 
         // initialize shaders
         gl::UseProgram(program);
+
+        // MVP
+        let matrix_id = gl::GetUniformLocation(program, to_c_str("mvp"));
+        // apparently the following line must be after shader initialization/selection/linking/whatever else it doesn't work
+        gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, mvp_array.as_ptr());
 
         gl::BindFragDataLocation(
             program,
@@ -175,6 +174,7 @@ fn main() {
         unsafe {
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
+
             gl::DrawArrays(gl::TRIANGLES, 0, 3);
         }
 
