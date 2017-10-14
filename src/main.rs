@@ -28,6 +28,10 @@ static VERTEX_DATA: [GLfloat; 6] = [
 static WIDTH: u32 = 400;
 static HEIGHT: u32 = 300;
 
+fn to_c_str(s: &str) -> *mut std::os::raw::c_char {
+    return CString::new(s).unwrap().into_raw();
+}
+
 fn main() {
     env_logger::init().unwrap();
 
@@ -73,6 +77,10 @@ fn main() {
     let mvp = projection * view * model;
 
     unsafe {
+        // MVP
+        let matrix_id = gl::GetUniformLocation(program, to_c_str("mvp"));
+        gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, &mvp[0][0]);
+
         // VAO
         gl::GenVertexArrays(1, &mut vao);
         gl::BindVertexArray(vao);
@@ -92,12 +100,12 @@ fn main() {
         gl::BindFragDataLocation(
             program,
             0,
-            CString::new("out_Color").unwrap().into_raw());
+            to_c_str("out_Color"));
 
         // vertex data layout
         let position_attrib = gl::GetAttribLocation(
             program,
-            CString::new("in_Position").unwrap().into_raw()) as GLuint;
+            to_c_str("in_Position")) as GLuint;
         gl::EnableVertexAttribArray(position_attrib);
         gl::VertexAttribPointer(
             position_attrib,
