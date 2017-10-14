@@ -57,29 +57,39 @@ fn main() {
     let mut vbo = 0;
 
     unsafe {
-        // Create Vertex Array Object
+        // VAO
         gl::GenVertexArrays(1, &mut vao);
         gl::BindVertexArray(vao);
 
-        // Create a Vertex Buffer Object and copy the vertex data to it
+        // VBO
         gl::GenBuffers(1, &mut vbo);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-        gl::BufferData(gl::ARRAY_BUFFER,
-                       (VERTEX_DATA.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
-                       mem::transmute(&VERTEX_DATA[0]),
-                       gl::STATIC_DRAW);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (VERTEX_DATA.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+            mem::transmute(&VERTEX_DATA[0]),
+            gl::STATIC_DRAW);
 
-        // Use shader program
+        // initialize shaders
         gl::UseProgram(program);
-        gl::BindFragDataLocation(program, 0,
-                                 CString::new("out_Color").unwrap().into_raw());
 
-        // Specify the layout of the vertex data
-        let pos_attr = gl::GetAttribLocation(program,
-                                             CString::new("in_Position").unwrap().into_raw()) as GLuint;
-        gl::EnableVertexAttribArray(pos_attr);
-        gl::VertexAttribPointer(pos_attr, 2, gl::FLOAT,
-                                gl::FALSE as GLboolean, 0, ptr::null());
+        gl::BindFragDataLocation(
+            program,
+            0,
+            CString::new("out_Color").unwrap().into_raw());
+
+        // vertex data layout
+        let position_attrib = gl::GetAttribLocation(
+            program,
+            CString::new("in_Position").unwrap().into_raw()) as GLuint;
+        gl::EnableVertexAttribArray(position_attrib);
+        gl::VertexAttribPointer(
+            position_attrib,
+            2,
+            gl::FLOAT,
+            gl::FALSE as GLboolean,
+            0,
+            ptr::null());
     }
 
     info!("successfully initialized static data");
@@ -87,16 +97,12 @@ fn main() {
 
     while !window.should_close() {
         unsafe {
-            // Clear the screen to black
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
-
-            // Draw a triangle from the 3 vertices
             gl::DrawArrays(gl::TRIANGLES, 0, 3);
-
-            window.swap_buffers();
         }
 
+        window.swap_buffers();
         glfw.poll_events();
 
         for (_, event) in glfw::flush_messages(&events) {
