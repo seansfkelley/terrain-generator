@@ -53,6 +53,18 @@ extern "system" fn gl_debug_message(
     }
 }
 
+fn arrayify_matrix(mat: glm::Mat4) -> *const f32 {
+    let mut array = Vec::new();
+
+    for i in 0..4 {
+        for j in 0..4 {
+            array.push(mat[i][j]);
+        }
+    }
+
+    return array.as_ptr();
+}
+
 fn main() {
     env_logger::init().unwrap();
 
@@ -118,13 +130,8 @@ fn main() {
     let model = glm::Mat4::one();
 
     let mvp = projection * view * model;
-    let mut mvp_array = Vec::new();
 
-    for i in 0..4 {
-        for j in 0..4 {
-            mvp_array.push(mvp[i][j]);
-        }
-    }
+    let matrix_id;
 
     unsafe {
         // VAO
@@ -144,9 +151,7 @@ fn main() {
         gl::UseProgram(program);
 
         // MVP
-        let matrix_id = gl::GetUniformLocation(program, to_c_str("mvp"));
-        // apparently the following line must be after shader initialization/selection/linking/whatever else it doesn't work
-        gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, mvp_array.as_ptr());
+        matrix_id = gl::GetUniformLocation(program, to_c_str("mvp"));
 
         gl::BindFragDataLocation(
             program,
@@ -175,6 +180,8 @@ fn main() {
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
+            // apparently the following line must be after shader initialization/selection/linking/whatever else it doesn't work
+            gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, arrayify_matrix(mvp));
             gl::DrawArrays(gl::TRIANGLES, 0, 3);
         }
 
