@@ -1,0 +1,10 @@
+[package]
+name = "terrain-generator"
+version = "0.1.0"
+authors = ["Sean Kelley <seansfkelley@gmail.com>"]
+
+[dependencies]
+gl = "0.6.0"
+
+[dependencies.glfw]
+git = "https://github.com/bjz/glfw-rs.git"
