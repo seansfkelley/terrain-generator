@@ -28,11 +28,9 @@ pub enum LookDirection {
 impl Camera {
     pub fn new() -> Camera {
         Camera {
-            pos: glm::vec3(4.0, 3.0, 3.0),
-            // azimuth: PI,
-            azimuth: -2.0,
-            // inclination: FRAC_PI_2,
-            inclination: 2.2,
+            pos: glm::vec3(4.0, 4.0, 3.0),
+            azimuth: 4.2,
+            inclination: -0.5,
             field_of_view: 45.0,
         }
     }
@@ -40,49 +38,47 @@ impl Camera {
     pub fn look(&mut self, dir: LookDirection, amount: f32) {
         match dir {
             LookDirection::Vertical   => {
-                self.inclination -= amount;
-                // TODO: Make sure it can't go beyond +/- 90.
+                self.inclination = (self.inclination + amount).min(FRAC_PI_2 - 0.01).max(-FRAC_PI_2 + 0.01);
             },
             LookDirection::Horizontal => {
-                // TODO: clamp
-                self.azimuth = clamp(self.azimuth + amount, 0, TWO_PI);
+                self.azimuth = ((self.azimuth + amount) + TWO_PI) % TWO_PI;
             },
         }
     }
 
     pub fn direction(&self) -> glm::Vec3 {
-        let reverse_inclination = FRAC_PI_2 - self.inclination;
+        // let reverse_inclination = FRAC_PI_2 - self.inclination;
         glm::vec3(
-            reverse_inclination.cos() * self.azimuth.sin(),
-            reverse_inclination.sin(),
-            reverse_inclination.cos() * self.azimuth.cos(),
+            self.inclination.cos() * self.azimuth.sin(),
+            self.inclination.sin(),
+            self.inclination.cos() * self.azimuth.cos(),
         )
     }
 
     fn right(&self) -> glm::Vec3 {
+        let rotated_azimuth = self.azimuth - FRAC_PI_2;
         glm::vec3(
-            self.azimuth.sin(),
+            rotated_azimuth.sin(),
             0.0,
-            self.azimuth.cos(),
+            rotated_azimuth.cos(),
         )
     }
 
     pub fn up(&self) -> glm::Vec3 {
-        self.right() * self.direction()
+        glm::cross(self.right(), self.direction())
     }
 
-    // pub fn translate(&mut self, dir: TranslateDirection, amount: f32) {
-    //     match dir {
-    //         TranslateDirection::Forward  => {
-    //             self.pos = self.pos + self.dir * amount;
-    //         },
-    //         TranslateDirection::Side     => {
-    //             // Literally no idea if this is correct.
-    //             self.pos = self.pos + (self.dir * self.up) * amount;
-    //         },
-    //         TranslateDirection::Altitude => {
-    //             self.pos = self.pos + self.up * amount;
-    //         },
-    //     }
-    // }
+    pub fn translate(&mut self, dir: TranslateDirection, amount: f32) {
+        match dir {
+            TranslateDirection::Forward  => {
+                self.pos = self.pos + self.direction() * amount;
+            },
+            TranslateDirection::Side     => {
+                self.pos = self.pos + self.right() * amount;
+            },
+            TranslateDirection::Altitude => {
+                self.pos = self.pos + self.up() * amount;
+            },
+        }
+    }
 }

@@ -23,8 +23,8 @@ use gl::types::*;
 // Vertex data
 static VERTEX_DATA: [GLfloat; 6] = [
     0.0,  0.5,
-    0.5, -0.5,
-    -0.5, -0.5
+    0.5, -1.0,
+    -0.5, -1.0
 ];
 
 const WIDTH: u32 = 400;
@@ -175,6 +175,8 @@ fn main() {
     info!("successfully initialized static data");
     info!("beginning event loop");
 
+    println!("{:?}", glm::vec3(1.0,3.0,2.0) * glm::vec3(4.0,5.0,9.0));
+
     let mut last_time = glfw.get_time() as f32;
     let mut camera = camera::Camera::new();
 
@@ -184,13 +186,23 @@ fn main() {
         last_time = t;
 
         let (mouse_x, mouse_y) = window.get_cursor_pos();
+        window.set_cursor_pos(HALF_WIDTH as f64, HALF_HEIGHT as f64);
 
         camera.look(camera::LookDirection::Horizontal, LOOK_SPEED * delta_t * (HALF_WIDTH - mouse_x as f32));
         camera.look(camera::LookDirection::Vertical, LOOK_SPEED * delta_t * (HALF_HEIGHT - mouse_y as f32));
 
-        window.set_cursor_pos(HALF_WIDTH as f64, HALF_HEIGHT as f64);
-
-        // TODO: camera.translate
+        if window.get_key(glfw::Key::W) == glfw::Action::Press {
+            camera.translate(camera::TranslateDirection::Forward, delta_t * MOVE_SPEED);
+        }
+        if window.get_key(glfw::Key::S) == glfw::Action::Press {
+            camera.translate(camera::TranslateDirection::Forward, -delta_t * MOVE_SPEED);
+        }
+        if window.get_key(glfw::Key::A) == glfw::Action::Press {
+            camera.translate(camera::TranslateDirection::Side, -delta_t * MOVE_SPEED);
+        }
+        if window.get_key(glfw::Key::D) == glfw::Action::Press {
+            camera.translate(camera::TranslateDirection::Side, delta_t * MOVE_SPEED);
+        }
 
         let projection = glm::ext::perspective(glm::builtin::radians(camera.field_of_view), ASPECT_RATIO, 0.1, 100.0);
         let view = glm::ext::look_at(
