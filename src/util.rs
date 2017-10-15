@@ -1,14 +1,14 @@
 use glm;
+use std::boxed::Box;
 
-// TODO: Probably a faster way to implement this.
-pub fn arrayify_mat4(mat: glm::Mat4) -> *const f32 {
-    let mut array = Vec::new();
+pub fn arrayify_mat4(mat: glm::Mat4) -> Box<[f32; 16]> {
+    let mut array = [0f32; 16];
 
     for i in 0..4 {
         for j in 0..4 {
-            array.push(mat[i][j]);
+            array[i * 4 + j] = mat[i][j];
         }
     }
 
-    return array.as_ptr();
+    Box::new(array)
 }

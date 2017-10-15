@@ -176,11 +176,12 @@ fn main() {
 
         let model_mat = glm::Mat4::one();
         let mvp = camera.projection_mat(ASPECT_RATIO) * camera.view_mat() * model_mat;
+        let mvp_array = util::arrayify_mat4(mvp);
 
         unsafe {
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
-            gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, util::arrayify_mat4(mvp));
+            gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, &*mvp_array as *const f32);
             gl::DrawArrays(gl::TRIANGLES, 0, 3);
         }
 
