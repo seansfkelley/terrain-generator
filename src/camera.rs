@@ -1,4 +1,4 @@
-use std::f32::consts::{ PI, FRAC_PI_2,  };
+use std::f32::consts::{ PI, FRAC_PI_2, FRAC_PI_4 };
 use glm;
 
 const TWO_PI: f32 = PI * 2.0;
@@ -8,7 +8,7 @@ pub struct Camera {
     pub pos: glm::Vec3,
     azimuth: f32,
     inclination: f32,
-    pub field_of_view: f32,
+    field_of_view: f32,
 }
 
 pub enum TranslateDirection {
@@ -28,7 +28,7 @@ impl Camera {
             pos: glm::vec3(0.0, 0.0, 1.0),
             azimuth: PI, // Look at -Z (into the screen).
             inclination: FRAC_PI_2, // Look at the horizon.
-            field_of_view: 45.0,
+            field_of_view: FRAC_PI_4,
         }
     }
 
@@ -77,5 +77,17 @@ impl Camera {
                 self.pos = self.pos + self.up() * amount;
             },
         }
+    }
+
+    pub fn projection_mat(&self, aspect_ratio: f32) -> glm::Mat4 {
+        glm::ext::perspective(self.field_of_view, aspect_ratio, 0.1, 100.0)
+    }
+
+    pub fn view_mat(&self) -> glm::Mat4 {
+        glm::ext::look_at(
+            self.pos,
+            self.pos + self.direction(),
+            self.up(),
+        )
     }
 }

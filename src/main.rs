@@ -10,7 +10,9 @@ extern crate env_logger;
 extern crate num_traits;
 
 mod shaders;
+mod controls;
 mod camera;
+mod util;
 
 use std::mem;
 use std::ptr;
@@ -33,8 +35,7 @@ const HEIGHT: u32 = 300;
 const HALF_HEIGHT: f32 = (HEIGHT as f32) / 2.0;
 const ASPECT_RATIO: f32 = (WIDTH as f32) / (HEIGHT as f32);
 
-const LOOK_SPEED: f32 = 0.05;
-const MOVE_SPEED: f32 = 8.0;
+
 
 fn to_c_str(s: &str) -> *mut c_char {
     return CString::new(s).unwrap().into_raw();
@@ -58,18 +59,6 @@ extern "system" fn gl_debug_message(
             id,
             CStr::from_ptr(message).to_str().unwrap());
     }
-}
-
-fn arrayify_matrix(mat: glm::Mat4) -> *const f32 {
-    let mut array = Vec::new();
-
-    for i in 0..4 {
-        for j in 0..4 {
-            array.push(mat[i][j]);
-        }
-    }
-
-    return array.as_ptr();
 }
 
 fn main() {
@@ -183,47 +172,15 @@ fn main() {
         let delta_t = t - last_time;
         last_time = t;
 
-        let (mouse_x, mouse_y) = window.get_cursor_pos();
-        window.set_cursor_pos(HALF_WIDTH as f64, HALF_HEIGHT as f64);
+        controls::move_camera_from_mouse(&mut camera, &mut window, delta_t);
 
-        camera.look(camera::LookDirection::Horizontal, LOOK_SPEED * delta_t * (HALF_WIDTH - mouse_x as f32));
-        camera.look(camera::LookDirection::Vertical, LOOK_SPEED * delta_t * (HALF_HEIGHT - mouse_y as f32));
-
-        if window.get_key(glfw::Key::W) == glfw::Action::Press {
-            camera.translate(camera::TranslateDirection::Forward, delta_t * MOVE_SPEED);
-        }
-        if window.get_key(glfw::Key::S) == glfw::Action::Press {
-            camera.translate(camera::TranslateDirection::Forward, -delta_t * MOVE_SPEED);
-        }
-        if window.get_key(glfw::Key::A) == glfw::Action::Press {
-            camera.translate(camera::TranslateDirection::Side, -delta_t * MOVE_SPEED);
-        }
-        if window.get_key(glfw::Key::D) == glfw::Action::Press {
-            camera.translate(camera::TranslateDirection::Side, delta_t * MOVE_SPEED);
-        }
-        if window.get_key(glfw::Key::R) == glfw::Action::Press {
-            camera.translate(camera::TranslateDirection::Altitude, delta_t * MOVE_SPEED);
-        }
-        if window.get_key(glfw::Key::F) == glfw::Action::Press {
-            camera.translate(camera::TranslateDirection::Altitude, -delta_t * MOVE_SPEED);
-        }
-
-        let projection = glm::ext::perspective(glm::builtin::radians(camera.field_of_view), ASPECT_RATIO, 0.1, 100.0);
-        let view = glm::ext::look_at(
-            camera.pos,
-            camera.pos + camera.direction(),
-            camera.up(),
-        );
-        let model = glm::Mat4::one();
-
-        let mvp = projection * view * model;
+        let model_mat = glm::Mat4::one();
+        let mvp = camera.projection_mat(ASPECT_RATIO) * camera.view_mat() * model_mat;
 
         unsafe {
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
-
-            // apparently the following line must be after shader initialization/selection/linking/whatever else it doesn't work
-            gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, arrayify_matrix(mvp));
+            gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, util::arrayify_mat4(mvp));
             gl::DrawArrays(gl::TRIANGLES, 0, 3);
         }
 
