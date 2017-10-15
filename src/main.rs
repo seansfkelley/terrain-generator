@@ -10,6 +10,7 @@ extern crate env_logger;
 extern crate num_traits;
 
 mod shaders;
+mod camera;
 
 use std::mem;
 use std::ptr;
@@ -26,8 +27,14 @@ static VERTEX_DATA: [GLfloat; 6] = [
     -0.5, -0.5
 ];
 
-static WIDTH: u32 = 400;
-static HEIGHT: u32 = 300;
+const WIDTH: u32 = 400;
+const HALF_WIDTH: f32 = (WIDTH as f32) / 2.0;
+const HEIGHT: u32 = 300;
+const HALF_HEIGHT: f32 = (HEIGHT as f32) / 2.0;
+const ASPECT_RATIO: f32 = (WIDTH as f32) / (HEIGHT as f32);
+
+const LOOK_SPEED: f32 = 0.05;
+const MOVE_SPEED: f32 = 3.0;
 
 fn to_c_str(s: &str) -> *mut c_char {
     return CString::new(s).unwrap().into_raw();
@@ -87,6 +94,9 @@ fn main() {
 
     window.set_key_polling(true);
     window.make_current();
+    glfw.poll_events();
+    window.set_cursor_mode(glfw::CursorMode::Disabled);
+    window.set_cursor_pos(HALF_WIDTH as f64, HALF_HEIGHT as f64);
 
     gl::load_with(|s| window.get_proc_address(s) as *const _);
 
@@ -120,16 +130,6 @@ fn main() {
 
     let mut vao = 0;
     let mut vbo = 0;
-
-    let projection = glm::ext::perspective(glm::builtin::radians(45.0), (WIDTH as f32) / (HEIGHT as f32), 0.1, 100.0);
-    let view = glm::ext::look_at(
-        glm::Vec3::new(4.0, 3.0, 3.0),
-        glm::Vec3::new(0.0, 0.0, 0.0),
-        glm::Vec3::new(0.0, 1.0, 0.0)
-    );
-    let model = glm::Mat4::one();
-
-    let mvp = projection * view * model;
 
     let matrix_id;
 
@@ -175,7 +175,35 @@ fn main() {
     info!("successfully initialized static data");
     info!("beginning event loop");
 
+    let mut last_time = glfw.get_time() as f32;
+    let mut camera = camera::Camera::new();
+
     while !window.should_close() {
+        let t = glfw.get_time() as f32;
+        let delta_t = t - last_time;
+        last_time = t;
+
+        let (mouse_x, mouse_y) = window.get_cursor_pos();
+
+        camera.look(camera::LookDirection::Horizontal, LOOK_SPEED * delta_t * (HALF_WIDTH - mouse_x as f32));
+        camera.look(camera::LookDirection::Vertical, LOOK_SPEED * delta_t * (HALF_HEIGHT - mouse_y as f32));
+
+        window.set_cursor_pos(HALF_WIDTH as f64, HALF_HEIGHT as f64);
+
+        // TODO: camera.translate
+
+        let projection = glm::ext::perspective(glm::builtin::radians(camera.field_of_view), ASPECT_RATIO, 0.1, 100.0);
+        let view = glm::ext::look_at(
+            camera.pos,
+            camera.pos + camera.direction(),
+            camera.up(),
+        );
+        let model = glm::Mat4::one();
+
+        let mvp = projection * view * model;
+
+        println!("{:?}", camera);
+
         unsafe {
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
