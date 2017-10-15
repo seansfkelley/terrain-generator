@@ -1,9 +1,6 @@
 use std::f32::consts::{ PI, FRAC_PI_2,  };
 use glm;
 
-// static AZIMUTH_REF_DIR: glm::Vec3 = glm::vec3(0.0, 0.0, -1.0);
-// static ZENITH: glm::Vec3 = glm::vec3(0.0, 1.0, 0.0);
-
 const TWO_PI: f32 = PI * 2.0;
 
 #[derive(Debug)]
@@ -28,9 +25,9 @@ pub enum LookDirection {
 impl Camera {
     pub fn new() -> Camera {
         Camera {
-            pos: glm::vec3(4.0, 4.0, 3.0),
-            azimuth: 4.2,
-            inclination: -0.5,
+            pos: glm::vec3(0.0, 0.0, 1.0),
+            azimuth: PI, // Look at -Z (into the screen).
+            inclination: FRAC_PI_2, // Look at the horizon.
             field_of_view: 45.0,
         }
     }
@@ -38,7 +35,7 @@ impl Camera {
     pub fn look(&mut self, dir: LookDirection, amount: f32) {
         match dir {
             LookDirection::Vertical   => {
-                self.inclination = (self.inclination + amount).min(FRAC_PI_2 - 0.01).max(-FRAC_PI_2 + 0.01);
+                self.inclination = (self.inclination - amount).max(0.01).min(PI - 0.01);
             },
             LookDirection::Horizontal => {
                 self.azimuth = ((self.azimuth + amount) + TWO_PI) % TWO_PI;
@@ -47,11 +44,11 @@ impl Camera {
     }
 
     pub fn direction(&self) -> glm::Vec3 {
-        // let reverse_inclination = FRAC_PI_2 - self.inclination;
+        let reverse_inclination = FRAC_PI_2 - self.inclination;
         glm::vec3(
-            self.inclination.cos() * self.azimuth.sin(),
-            self.inclination.sin(),
-            self.inclination.cos() * self.azimuth.cos(),
+            reverse_inclination.cos() * self.azimuth.sin(),
+            reverse_inclination.sin(),
+            reverse_inclination.cos() * self.azimuth.cos(),
         )
     }
 

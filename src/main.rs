@@ -34,7 +34,7 @@ const HALF_HEIGHT: f32 = (HEIGHT as f32) / 2.0;
 const ASPECT_RATIO: f32 = (WIDTH as f32) / (HEIGHT as f32);
 
 const LOOK_SPEED: f32 = 0.05;
-const MOVE_SPEED: f32 = 3.0;
+const MOVE_SPEED: f32 = 8.0;
 
 fn to_c_str(s: &str) -> *mut c_char {
     return CString::new(s).unwrap().into_raw();
@@ -175,8 +175,6 @@ fn main() {
     info!("successfully initialized static data");
     info!("beginning event loop");
 
-    println!("{:?}", glm::vec3(1.0,3.0,2.0) * glm::vec3(4.0,5.0,9.0));
-
     let mut last_time = glfw.get_time() as f32;
     let mut camera = camera::Camera::new();
 
@@ -203,6 +201,12 @@ fn main() {
         if window.get_key(glfw::Key::D) == glfw::Action::Press {
             camera.translate(camera::TranslateDirection::Side, delta_t * MOVE_SPEED);
         }
+        if window.get_key(glfw::Key::R) == glfw::Action::Press {
+            camera.translate(camera::TranslateDirection::Altitude, delta_t * MOVE_SPEED);
+        }
+        if window.get_key(glfw::Key::F) == glfw::Action::Press {
+            camera.translate(camera::TranslateDirection::Altitude, -delta_t * MOVE_SPEED);
+        }
 
         let projection = glm::ext::perspective(glm::builtin::radians(camera.field_of_view), ASPECT_RATIO, 0.1, 100.0);
         let view = glm::ext::look_at(
@@ -213,8 +217,6 @@ fn main() {
         let model = glm::Mat4::one();
 
         let mvp = projection * view * model;
-
-        println!("{:?}", camera);
 
         unsafe {
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
