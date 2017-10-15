@@ -5,7 +5,7 @@ const TWO_PI: f32 = PI * 2.0;
 
 #[derive(Debug)]
 pub struct Camera {
-    pub pos: glm::Vec3,
+    pos: glm::Vec3,
     azimuth: f32,
     inclination: f32,
     field_of_view: f32,
