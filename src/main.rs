@@ -208,6 +208,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
 
     let mut last_time = glfw.get_time() as f32;
     let mut camera = camera::Camera::new();
+    camera.translate(camera::TranslateDirection::Forward, -2.0);
 
     while !window.should_close() {
         let t = glfw.get_time() as f32;
