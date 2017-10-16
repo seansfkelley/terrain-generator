@@ -17,8 +17,8 @@ pub fn compile_shader(filename: &str, type_: GLenum) -> GLuint {
     unsafe {
         debug!("creating shader");
         shader = gl::CreateShader(type_);
-        util::die_if_zero(shader, "error creating shader");
-        util::die_if_gl_error();
+        assert_ne!(shader, 0, "error creating shader");
+        util::assert_no_gl_error();
 
         debug!("providing shader source");
         gl::ShaderSource(
@@ -26,16 +26,16 @@ pub fn compile_shader(filename: &str, type_: GLenum) -> GLuint {
             1,
             &CString::new(shader_src.as_bytes()).unwrap().as_ptr() as *const *const i8,
             ptr::null());
-        util::die_if_gl_error();
+        util::assert_no_gl_error();
 
         debug!("compiling shader");
         gl::CompileShader(shader);
-        util::die_if_gl_error();
+        util::assert_no_gl_error();
 
         debug!("checking shader status");
         let mut status = gl::FALSE as GLint;
         gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut status);
-        util::die_if_gl_error();
+        util::assert_no_gl_error();
 
         if status != (gl::TRUE as GLint) {
             debug!("shader failed to initialize, collecting information");
@@ -64,25 +64,25 @@ pub fn link_program(vertex_shader: GLuint, fragment_shader: GLuint) -> GLuint {
     unsafe {
         debug!("creating shader");
         let program = gl::CreateProgram();
-        util::die_if_zero(program, "error creating program");
-        util::die_if_gl_error();
+        assert_ne!(program, 0, "error creating program");
+        util::assert_no_gl_error();
 
         debug!("attaching vertex shader");
         gl::AttachShader(program, vertex_shader);
-        util::die_if_gl_error();
+        util::assert_no_gl_error();
 
         debug!("attaching fragment shader");
         gl::AttachShader(program, fragment_shader);
-        util::die_if_gl_error();
+        util::assert_no_gl_error();
 
         debug!("linking program");
         gl::LinkProgram(program);
-        util::die_if_gl_error();
+        util::assert_no_gl_error();
 
         debug!("checking program status");
         let mut status = gl::FALSE as GLint;
         gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
-        util::die_if_gl_error();
+        util::assert_no_gl_error();
 
         if status != (gl::TRUE as GLint) {
             debug!("program failed to initialize, collecting information");

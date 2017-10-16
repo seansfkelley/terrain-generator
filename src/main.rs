@@ -16,10 +16,9 @@ mod camera;
 mod util;
 mod event_handlers;
 mod file;
+mod objects;
 
-use std::mem;
-use std::ptr;
-use std::vec;
+use std::{ mem, ptr, vec };
 use std::os::raw::{ c_void, c_char };
 use std::ffi::{ CString, CStr };
 use std::sync::mpsc::Receiver;
@@ -107,57 +106,14 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
 
     let vs = shaders::compile_shader("./shaders/basic_w_color.vert", gl::VERTEX_SHADER);
     let fs = shaders::compile_shader("./shaders/given_color.frag", gl::FRAGMENT_SHADER);
+    let program = shaders::link_program(vs, fs);
+
     let obj_file = obj::parse(file::read_file_contents("./objects/icosahedron.obj"))
         .unwrap();
 
-    let mut vertices = vec::Vec::<obj::Vertex>::new();
-
-    // I tried noodling around with flat_map, but type system complains in ways I don't yet understand how to fix.
-    obj_file
-        .objects
-        .iter()
-        .filter(|o| o.vertices.len() > 0)
-        .for_each(|o| {
-            o
-                .geometry
-                .iter()
-                .for_each(|g| {
-                    g
-                        .shapes
-                        .iter()
-                        .for_each(|s| {
-                            match s.primitive {
-                                obj::Primitive::Triangle(
-                                    (v1, _, _),
-                                    (v2, _, _),
-                                    (v3, _, _),
-                                ) => {
-                                    vertices.push(o.vertices[v1]);
-                                    vertices.push(o.vertices[v2]);
-                                    vertices.push(o.vertices[v3]);
-                                },
-                                _ => { panic!("got non-triangle primitive"); },
-                            }
-                        })
-                })
-        });
-
-    let mut flattened_vertices = vec::Vec::<f32>::new();
-
-    vertices.iter()
-        .for_each(|v| {
-            flattened_vertices.push(v.x as f32);
-            flattened_vertices.push(v.y as f32);
-            flattened_vertices.push(v.z as f32);
-        });
-
-    let program = shaders::link_program(vs, fs);
+    let mut o = objects::RenderableObject::new(obj_file.objects[1].clone(), program);
 
     info!("successfully created shaders/program");
-
-    let mut vao = 0;
-    let mut vertex_position_buffer = 0;
-    let mut vertex_color_buffer = 0;
 
     let matrix_id;
 
@@ -166,64 +122,37 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         gl::Enable(gl::DEPTH_TEST);
         gl::DepthFunc(gl::LESS);
 
-        // VAO
-        gl::GenVertexArrays(1, &mut vao);
-        gl::BindVertexArray(vao);
-
-        // initialize shaders
+        // TODO: we have to keep this here for now, probably because of mvp?
         gl::UseProgram(program);
 
         // MVP
         matrix_id = gl::GetUniformLocation(program, CString::new("mvp").unwrap().as_ptr());
-
         gl::BindFragDataLocation(
             program,
             0,
             CString::new("out_Color").unwrap().as_ptr());
 
-        // set current buffer and fill it with vertex position data
-        gl::GenBuffers(1, &mut vertex_position_buffer);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vertex_position_buffer);
-        gl::BufferData(
-            gl::ARRAY_BUFFER,
-            (flattened_vertices.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
-            flattened_vertices.as_ptr() as *const _,
-            gl::STATIC_DRAW);
+        // // set current buffer and fill it with vertex "color" data (reusing position for now for test)
+        // gl::GenBuffers(1, &mut vertex_color_buffer);
+        // gl::BindBuffer(gl::ARRAY_BUFFER, vertex_color_buffer);
+        // gl::BufferData(
+        //     gl::ARRAY_BUFFER,
+        //     (flattened_vertices.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+        //     flattened_vertices.as_ptr() as *const _,
+        //     gl::STATIC_DRAW);
 
-        // pass position data to shaders
-        let position_attrib = gl::GetAttribLocation(
-            program,
-            CString::new("in_Position").unwrap().as_ptr()) as GLuint;
-        gl::EnableVertexAttribArray(position_attrib);
-        gl::VertexAttribPointer(
-            position_attrib,
-            3,
-            gl::FLOAT,
-            gl::FALSE as GLboolean,
-            0,
-            ptr::null());
-
-        // set current buffer and fill it with vertex "color" data (reusing position for now for test)
-        gl::GenBuffers(1, &mut vertex_color_buffer);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vertex_color_buffer);
-        gl::BufferData(
-            gl::ARRAY_BUFFER,
-            (flattened_vertices.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
-            flattened_vertices.as_ptr() as *const _,
-            gl::STATIC_DRAW);
-
-        // pass color data to shaders
-        let fragment_color_attrib = gl::GetAttribLocation(
-            program,
-            CString::new("in_FragmentColor").unwrap().as_ptr()) as GLuint;
-        gl::EnableVertexAttribArray(fragment_color_attrib);
-        gl::VertexAttribPointer(
-            fragment_color_attrib,
-            2,
-            gl::FLOAT,
-            gl::FALSE as GLboolean,
-            0,
-            ptr::null());
+        // // pass color data to shaders
+        // let fragment_color_attrib = gl::GetAttribLocation(
+        //     program,
+        //     CString::new("in_FragmentColor").unwrap().as_ptr()) as GLuint;
+        // gl::EnableVertexAttribArray(fragment_color_attrib);
+        // gl::VertexAttribPointer(
+        //     fragment_color_attrib,
+        //     2,
+        //     gl::FLOAT,
+        //     gl::FALSE as GLboolean,
+        //     0,
+        //     ptr::null());
     }
 
     info!("successfully initialized static data");
@@ -248,7 +177,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
             gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, &*mvp_array as *const f32);
-            gl::DrawArrays(gl::TRIANGLES, 0, flattened_vertices.len() as i32);
+            o.render();
         }
 
         window.swap_buffers();

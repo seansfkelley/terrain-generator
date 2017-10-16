@@ -2,17 +2,11 @@ use gl;
 use glm;
 use std::boxed::Box;
 
-pub fn die_if_zero(v: u32, message: &str) {
-    if v == 0 {
-        panic!(format!("unexpected zero value; {}", message));
-    }
-}
-
-pub fn die_if_gl_error() {
+pub fn assert_no_gl_error() {
     unsafe {
         let error = gl::GetError();
         if error != gl::NO_ERROR {
-            panic!(format!("OpenGL error code {}", error));
+            panic!(format!("OpenGL error code 0x{:X}", error));
         }
     }
 }
