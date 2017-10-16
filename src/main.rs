@@ -13,11 +13,13 @@ mod shaders;
 mod controls;
 mod camera;
 mod util;
+mod event_handlers;
 
 use std::mem;
 use std::ptr;
 use std::os::raw::{ c_void, c_char };
 use std::ffi::{ CString, CStr };
+use std::sync::mpsc::Receiver;
 use num_traits::identities::One;
 use glfw::Context;
 use gl::types::*;
@@ -30,9 +32,7 @@ static VERTEX_DATA: [GLfloat; 6] = [
 ];
 
 const WIDTH: u32 = 400;
-const HALF_WIDTH: f32 = (WIDTH as f32) / 2.0;
 const HEIGHT: u32 = 300;
-const HALF_HEIGHT: f32 = (HEIGHT as f32) / 2.0;
 const ASPECT_RATIO: f32 = (WIDTH as f32) / (HEIGHT as f32);
 
 extern "system" fn gl_debug_message(
@@ -77,8 +77,6 @@ fn main() {
 
     window.set_key_polling(true);
     window.make_current();
-    glfw.poll_events();
-    controls::init_window_controls(&mut window);
 
     gl::load_with(|s| window.get_proc_address(s) as *const _);
 
@@ -102,6 +100,13 @@ fn main() {
             warn!("OpenGL version is too old; will not enable OpenGL debug logging");
         }
     }
+
+    render(&mut glfw, &mut window, events);
+}
+
+fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f64, glfw::WindowEvent)>) {
+    glfw.poll_events();
+    controls::init_window_controls(window);
 
     let vs = shaders::compile_shader("./shaders/basic.vert", gl::VERTEX_SHADER);
     let fs = shaders::compile_shader("./shaders/white.frag", gl::FRAGMENT_SHADER);
@@ -165,7 +170,7 @@ fn main() {
         let delta_t = t - last_time;
         last_time = t;
 
-        controls::move_camera_from_mouse(&mut camera, &mut window, delta_t);
+        controls::move_camera_from_mouse(&mut camera, window, delta_t);
 
         let model_mat = glm::Mat4::one();
         let mvp = camera.projection_mat(ASPECT_RATIO) * camera.view_mat() * model_mat;
@@ -182,17 +187,7 @@ fn main() {
         glfw.poll_events();
 
         for (_, event) in glfw::flush_messages(&events) {
-            handle_window_event(&mut window, event);
+            event_handlers::handle_window_event(window, event);
         }
-    }
-}
-
-fn handle_window_event(window: &mut glfw::Window, event: glfw::WindowEvent) {
-    match event {
-        glfw::WindowEvent::Key(glfw::Key::Escape, _, glfw::Action::Press, _) => {
-            info!("received esc key, will close window");
-            window.set_should_close(true);
-        }
-        _ => {}
     }
 }
