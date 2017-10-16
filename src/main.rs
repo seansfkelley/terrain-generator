@@ -18,7 +18,7 @@ mod event_handlers;
 mod file;
 mod objects;
 
-use std::{ mem, ptr, vec };
+use std::ptr;
 use std::os::raw::{ c_void, c_char };
 use std::ffi::{ CString, CStr };
 use std::sync::mpsc::Receiver;
@@ -26,6 +26,7 @@ use num_traits::identities::One;
 use glfw::Context;
 use gl::types::*;
 use wavefront_obj::obj;
+use util::assert_no_gl_error;
 
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 600;
@@ -106,31 +107,27 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
 
     let vs = shaders::compile_shader("./shaders/basic_w_color.vert", gl::VERTEX_SHADER);
     let fs = shaders::compile_shader("./shaders/given_color.frag", gl::FRAGMENT_SHADER);
-    let program = shaders::link_program(vs, fs);
+    let program = shaders::Program::new(vs, fs, vec!["mvp"], vec!["in_Position"]);
 
     let obj_file = obj::parse(file::read_file_contents("./objects/icosahedron.obj"))
         .unwrap();
 
-    let mut o = objects::RenderableObject::new(obj_file.objects[1].clone(), program);
+    let mut o = objects::RenderableObject::new(obj_file.objects[1].clone(), &program);
 
     info!("successfully created shaders/program");
-
-    let matrix_id;
 
     unsafe {
         gl::Enable(gl::CULL_FACE);
         gl::Enable(gl::DEPTH_TEST);
         gl::DepthFunc(gl::LESS);
+        assert_no_gl_error();
 
-        // TODO: we have to keep this here for now, probably because of mvp?
-        gl::UseProgram(program);
-
-        // MVP
-        matrix_id = gl::GetUniformLocation(program, CString::new("mvp").unwrap().as_ptr());
+        // TODO: How to incorporate into abstraction?
         gl::BindFragDataLocation(
-            program,
+            program.name,
             0,
             CString::new("out_Color").unwrap().as_ptr());
+        assert_no_gl_error();
 
         // // set current buffer and fill it with vertex "color" data (reusing position for now for test)
         // gl::GenBuffers(1, &mut vertex_color_buffer);
@@ -176,7 +173,11 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         unsafe {
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-            gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, &*mvp_array as *const f32);
+            // TODO: We have to use the program before we set the MVP matrix, but that's something that should
+            // probably also be pushed to the object since it has model coordinates?
+            gl::UseProgram(program.name);
+            gl::UniformMatrix4fv(program.get_uniform("mvp"), 1, gl::FALSE, &*mvp_array as *const f32);
+            assert_no_gl_error();
             o.render();
         }
 

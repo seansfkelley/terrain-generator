@@ -1,22 +1,23 @@
 use std::vec::Vec;
 use std::mem::size_of;
-use std::ffi::CString;
 use std::ptr;
 use gl;
 use gl::types::*;
 use wavefront_obj::obj;
 use util::assert_no_gl_error;
 
-pub struct RenderableObject {
+use shaders;
+
+pub struct RenderableObject<'a> {
     object: obj::Object,
-    program: GLuint,
+    program: &'a shaders::Program,
     initialized: bool,
     vao: GLuint,
     indices: i32,
 }
 
-impl RenderableObject {
-    pub fn new(object: obj::Object, program: GLuint) -> RenderableObject {
+impl <'a> RenderableObject<'a> {
+    pub fn new(object: obj::Object, program: &shaders::Program) -> RenderableObject {
         RenderableObject {
             object: object,
             program: program,
@@ -30,9 +31,7 @@ impl RenderableObject {
         self.lazy_init();
 
         unsafe {
-            // TODO: Should probably upload program myself, but don't want to do it redundantly.
-            // Probably should create a Program object that acn be enabled/disabled.
-            gl::UseProgram(self.program);
+            gl::UseProgram(self.program.name);
             gl::BindVertexArray(self.vao);
             gl::DrawElements(gl::TRIANGLES, self.indices, gl::UNSIGNED_INT, ptr::null());
         }
@@ -77,11 +76,13 @@ impl RenderableObject {
             unsafe {
                 // TODO: Is this necessary?
                 // use the appropriate program so we can fetch information about it
-                // gl::UseProgram(self.program);
+                gl::UseProgram(self.program.name);
+                assert_no_gl_error();
 
                 // create the VAO for this object
                 gl::GenVertexArrays(1, &mut self.vao);
                 gl::BindVertexArray(self.vao);
+                assert_no_gl_error();
 
                 // set current array data buffer and fill it with vertex position data
                 let mut v_position_buffer: GLuint = 0;
@@ -92,13 +93,10 @@ impl RenderableObject {
                     (flattened_vertices.len() * size_of::<GLfloat>()) as GLsizeiptr,
                     flattened_vertices.as_ptr() as *const _,
                     gl::STATIC_DRAW);
+                assert_no_gl_error();
 
                 // find the location of the position argument in the shader and tell OpenGL that the currently bound array points to it in triples
-                let position_attrib_location = gl::GetAttribLocation(
-                    self.program,
-                    CString::new("in_Position").unwrap().as_ptr()) as GLuint;
-                assert_ne!(position_attrib_location, -1i32 as u32, "position attribute not found or not enabled in program");
-
+                let position_attrib_location = self.program.get_attrib("in_Position") as GLuint;
                 gl::EnableVertexAttribArray(position_attrib_location);
                 gl::VertexAttribPointer(
                     position_attrib_location,
@@ -107,6 +105,7 @@ impl RenderableObject {
                     gl::FALSE as GLboolean,
                     0,
                     ptr::null());
+                assert_no_gl_error();
 
                 // lastly, tell OpenGL about the indices (that must be correlated for all buffers!)
                 let mut index_buffer: GLuint = 0;
@@ -117,7 +116,6 @@ impl RenderableObject {
                     (flattened_triangle_indices.len() * size_of::<u32>()) as GLsizeiptr,
                     flattened_triangle_indices.as_ptr() as *const _,
                     gl::STATIC_DRAW);
-
                 assert_no_gl_error();
             }
         }
