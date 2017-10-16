@@ -28,8 +28,8 @@ use glfw::Context;
 use gl::types::*;
 use wavefront_obj::obj;
 
-const WIDTH: u32 = 400;
-const HEIGHT: u32 = 300;
+const WIDTH: u32 = 800;
+const HEIGHT: u32 = 600;
 const ASPECT_RATIO: f32 = (WIDTH as f32) / (HEIGHT as f32);
 
 extern "system" fn gl_debug_message(
