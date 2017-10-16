@@ -105,7 +105,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     glfw.poll_events();
     controls::init_window_controls(window);
 
-    let vs = shaders::compile_shader("./shaders/basic.vert", gl::VERTEX_SHADER);
+    let vs = shaders::compile_shader("./shaders/basic_w_color.vert", gl::VERTEX_SHADER);
     let fs = shaders::compile_shader("./shaders/given_color.frag", gl::FRAGMENT_SHADER);
     let obj_file = obj::parse(file::read_file_contents("./objects/icosahedron.obj"))
         .unwrap();
