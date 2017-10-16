@@ -162,6 +162,8 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
 
     unsafe {
         gl::Enable(gl::CULL_FACE);
+        gl::Enable(gl::DEPTH_TEST);
+        gl::DepthFunc(gl::LESS);
 
         // VAO
         gl::GenVertexArrays(1, &mut vao);
@@ -220,7 +222,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
 
         unsafe {
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
+            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
             gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, &*mvp_array as *const f32);
             gl::DrawArrays(gl::TRIANGLES, 0, flattened_vertices.len() as i32);
         }
