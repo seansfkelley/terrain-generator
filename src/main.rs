@@ -35,8 +35,6 @@ const HEIGHT: u32 = 300;
 const HALF_HEIGHT: f32 = (HEIGHT as f32) / 2.0;
 const ASPECT_RATIO: f32 = (WIDTH as f32) / (HEIGHT as f32);
 
-
-
 extern "system" fn gl_debug_message(
     source: GLenum,
     type_: GLenum,
@@ -80,8 +78,7 @@ fn main() {
     window.set_key_polling(true);
     window.make_current();
     glfw.poll_events();
-    window.set_cursor_mode(glfw::CursorMode::Disabled);
-    window.set_cursor_pos(HALF_WIDTH as f64, HALF_HEIGHT as f64);
+    controls::init_window_controls(&mut window);
 
     gl::load_with(|s| window.get_proc_address(s) as *const _);
 
