@@ -27,8 +27,8 @@ use gl::types::*;
 // Vertex data
 static VERTEX_DATA: [GLfloat; 6] = [
     0.0,  0.5,
+    -0.5, -1.0,
     0.5, -1.0,
-    -0.5, -1.0
 ];
 
 const WIDTH: u32 = 400;
@@ -121,6 +121,8 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     let matrix_id;
 
     unsafe {
+        gl::Enable(gl::CULL_FACE);
+
         // VAO
         gl::GenVertexArrays(1, &mut vao);
         gl::BindVertexArray(vao);
