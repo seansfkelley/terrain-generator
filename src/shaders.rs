@@ -1,24 +1,25 @@
 extern crate gl;
 
-use std::fs;
-use std::mem;
 use std::ptr;
 use std::str;
 use std::ffi::CString;
-use std::io::Read;
 use gl::types::*;
+
+use file;
 
 pub fn compile_shader(filename: &str, type_: GLenum) -> GLuint {
     info!("loading shader from {} of type 0x{:X}", filename, type_);
 
-    let mut shader_src: String = String::new();
-    fs::File::open(filename).unwrap().read_to_string(&mut shader_src).unwrap();
-    let shader_src_c_str = CString::new(shader_src.as_bytes()).unwrap().into_raw();
+    let shader_src = file::read_file_contents(filename);
     let shader;
 
     unsafe {
         shader = gl::CreateShader(type_);
-        gl::ShaderSource(shader, 1, mem::transmute(&shader_src_c_str), ptr::null());
+        gl::ShaderSource(
+            shader,
+            1,
+            &CString::new(shader_src.as_bytes()).unwrap().as_ptr() as *const *const i8,
+            ptr::null());
         gl::CompileShader(shader);
 
         let mut status = gl::FALSE as GLint;

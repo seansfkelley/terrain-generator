@@ -8,28 +8,25 @@ extern crate libc;
 extern crate log;
 extern crate env_logger;
 extern crate num_traits;
+extern crate wavefront_obj;
 
 mod shaders;
 mod controls;
 mod camera;
 mod util;
 mod event_handlers;
+mod file;
 
 use std::mem;
 use std::ptr;
+use std::vec;
 use std::os::raw::{ c_void, c_char };
 use std::ffi::{ CString, CStr };
 use std::sync::mpsc::Receiver;
 use num_traits::identities::One;
 use glfw::Context;
 use gl::types::*;
-
-// Vertex data
-static VERTEX_DATA: [GLfloat; 6] = [
-    0.0,  0.5,
-    -0.5, -1.0,
-    0.5, -1.0,
-];
+use wavefront_obj::obj;
 
 const WIDTH: u32 = 400;
 const HEIGHT: u32 = 300;
@@ -110,6 +107,49 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
 
     let vs = shaders::compile_shader("./shaders/basic.vert", gl::VERTEX_SHADER);
     let fs = shaders::compile_shader("./shaders/white.frag", gl::FRAGMENT_SHADER);
+    let obj_file = obj::parse(file::read_file_contents("./objects/icosahedron.obj"))
+        .unwrap();
+
+    let mut vertices = vec::Vec::<obj::Vertex>::new();
+
+    // I tried noodling around with flat_map, but type system complains in ways I don't yet understand how to fix.
+    obj_file
+        .objects
+        .iter()
+        .filter(|o| o.vertices.len() > 0)
+        .for_each(|o| {
+            o
+                .geometry
+                .iter()
+                .for_each(|g| {
+                    g
+                        .shapes
+                        .iter()
+                        .for_each(|s| {
+                            match s.primitive {
+                                obj::Primitive::Triangle(
+                                    (v1, _, _),
+                                    (v2, _, _),
+                                    (v3, _, _),
+                                ) => {
+                                    vertices.push(o.vertices[v1]);
+                                    vertices.push(o.vertices[v2]);
+                                    vertices.push(o.vertices[v3]);
+                                },
+                                _ => { panic!("got non-triangle primitive"); },
+                            }
+                        })
+                })
+        });
+
+    let mut flattened_vertices = vec::Vec::<f32>::new();
+
+    vertices.iter()
+        .for_each(|v| {
+            flattened_vertices.push(v.x as f32);
+            flattened_vertices.push(v.y as f32);
+            flattened_vertices.push(v.z as f32);
+        });
 
     let program = shaders::link_program(vs, fs);
 
@@ -132,8 +172,8 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
         gl::BufferData(
             gl::ARRAY_BUFFER,
-            (VERTEX_DATA.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
-            mem::transmute(&VERTEX_DATA[0]),
+            (flattened_vertices.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+            flattened_vertices.as_ptr() as *const _,
             gl::STATIC_DRAW);
 
         // initialize shaders
@@ -154,7 +194,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         gl::EnableVertexAttribArray(position_attrib);
         gl::VertexAttribPointer(
             position_attrib,
-            2,
+            3,
             gl::FLOAT,
             gl::FALSE as GLboolean,
             0,
@@ -182,7 +222,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
             gl::UniformMatrix4fv(matrix_id, 1, gl::FALSE, &*mvp_array as *const f32);
-            gl::DrawArrays(gl::TRIANGLES, 0, 3);
+            gl::DrawArrays(gl::TRIANGLES, 0, flattened_vertices.len() as i32);
         }
 
         window.swap_buffers();

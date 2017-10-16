@@ -6,10 +6,10 @@ authors = ["Sean Kelley <seansfkelley@gmail.com>"]
 [dependencies]
 gl = "0.6.0"
 glm = "0.2.3"
-sdl2 = "0.30.0"
 log = "0.3.8"
 env_logger = "0.4.3"
 num-traits = "0.1.40"
+wavefront_obj = "5.1.0"
 
 [dependencies.glfw]
 git = "https://github.com/bjz/glfw-rs.git"
