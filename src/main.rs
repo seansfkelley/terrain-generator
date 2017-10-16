@@ -37,10 +37,6 @@ const ASPECT_RATIO: f32 = (WIDTH as f32) / (HEIGHT as f32);
 
 
 
-fn to_c_str(s: &str) -> *mut c_char {
-    return CString::new(s).unwrap().into_raw();
-}
-
 extern "system" fn gl_debug_message(
     source: GLenum,
     type_: GLenum,
@@ -140,17 +136,17 @@ fn main() {
         gl::UseProgram(program);
 
         // MVP
-        matrix_id = gl::GetUniformLocation(program, to_c_str("mvp"));
+        matrix_id = gl::GetUniformLocation(program, CString::new("mvp").unwrap().as_ptr());
 
         gl::BindFragDataLocation(
             program,
             0,
-            to_c_str("out_Color"));
+            CString::new("out_Color").unwrap().as_ptr());
 
         // vertex data layout
         let position_attrib = gl::GetAttribLocation(
             program,
-            to_c_str("in_Position")) as GLuint;
+            CString::new("in_Position").unwrap().as_ptr()) as GLuint;
         gl::EnableVertexAttribArray(position_attrib);
         gl::VertexAttribPointer(
             position_attrib,
