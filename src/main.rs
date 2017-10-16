@@ -156,7 +156,8 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     info!("successfully created shaders/program");
 
     let mut vao = 0;
-    let mut vbo = 0;
+    let mut vertex_position_buffer = 0;
+    let mut vertex_color_buffer = 0;
 
     let matrix_id;
 
@@ -169,15 +170,6 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         gl::GenVertexArrays(1, &mut vao);
         gl::BindVertexArray(vao);
 
-        // VBO
-        gl::GenBuffers(1, &mut vbo);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-        gl::BufferData(
-            gl::ARRAY_BUFFER,
-            (flattened_vertices.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
-            flattened_vertices.as_ptr() as *const _,
-            gl::STATIC_DRAW);
-
         // initialize shaders
         gl::UseProgram(program);
 
@@ -189,7 +181,16 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
             0,
             CString::new("out_Color").unwrap().as_ptr());
 
-        // vertex data layout
+        // set current buffer and fill it with vertex position data
+        gl::GenBuffers(1, &mut vertex_position_buffer);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vertex_position_buffer);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (flattened_vertices.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+            flattened_vertices.as_ptr() as *const _,
+            gl::STATIC_DRAW);
+
+        // pass position data to shaders
         let position_attrib = gl::GetAttribLocation(
             program,
             CString::new("in_Position").unwrap().as_ptr()) as GLuint;
@@ -197,6 +198,28 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         gl::VertexAttribPointer(
             position_attrib,
             3,
+            gl::FLOAT,
+            gl::FALSE as GLboolean,
+            0,
+            ptr::null());
+
+        // set current buffer and fill it with vertex "color" data (reusing position for now for test)
+        gl::GenBuffers(1, &mut vertex_color_buffer);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vertex_color_buffer);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (flattened_vertices.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+            flattened_vertices.as_ptr() as *const _,
+            gl::STATIC_DRAW);
+
+        // pass color data to shaders
+        let fragment_color_attrib = gl::GetAttribLocation(
+            program,
+            CString::new("in_FragmentColor").unwrap().as_ptr()) as GLuint;
+        gl::EnableVertexAttribArray(fragment_color_attrib);
+        gl::VertexAttribPointer(
+            fragment_color_attrib,
+            2,
             gl::FLOAT,
             gl::FALSE as GLboolean,
             0,
