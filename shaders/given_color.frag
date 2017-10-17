@@ -1,6 +1,6 @@
 #version 150
 in vec3 fragmentColor;
-out vec3 out_Color;
+out vec3 butts;
 void main() {
-    out_Color = fragmentColor;
+    butts = fragmentColor;
 }

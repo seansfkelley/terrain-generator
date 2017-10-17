@@ -20,7 +20,7 @@ mod objects;
 
 use std::ptr;
 use std::os::raw::{ c_void, c_char };
-use std::ffi::{ CString, CStr };
+use std::ffi::CStr;
 use std::sync::mpsc::Receiver;
 use num_traits::identities::One;
 use glfw::Context;
@@ -107,7 +107,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
 
     let vs = shaders::compile_shader("./shaders/basic_w_color.vert", gl::VERTEX_SHADER);
     let fs = shaders::compile_shader("./shaders/given_color.frag", gl::FRAGMENT_SHADER);
-    let program = shaders::Program::new(vs, fs, vec!["mvp"], vec!["in_Position"]);
+    let program = shaders::Program::new(vs, fs, vec!["mvp"], vec!["in_Position", "in_FragmentColor"]);
 
     let obj_file = obj::parse(file::read_file_contents("./objects/icosahedron.obj"))
         .unwrap();
@@ -121,35 +121,6 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         gl::Enable(gl::DEPTH_TEST);
         gl::DepthFunc(gl::LESS);
         assert_no_gl_error();
-
-        // TODO: How to incorporate into abstraction?
-        gl::BindFragDataLocation(
-            program.name,
-            0,
-            CString::new("out_Color").unwrap().as_ptr());
-        assert_no_gl_error();
-
-        // // set current buffer and fill it with vertex "color" data (reusing position for now for test)
-        // gl::GenBuffers(1, &mut vertex_color_buffer);
-        // gl::BindBuffer(gl::ARRAY_BUFFER, vertex_color_buffer);
-        // gl::BufferData(
-        //     gl::ARRAY_BUFFER,
-        //     (flattened_vertices.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
-        //     flattened_vertices.as_ptr() as *const _,
-        //     gl::STATIC_DRAW);
-
-        // // pass color data to shaders
-        // let fragment_color_attrib = gl::GetAttribLocation(
-        //     program,
-        //     CString::new("in_FragmentColor").unwrap().as_ptr()) as GLuint;
-        // gl::EnableVertexAttribArray(fragment_color_attrib);
-        // gl::VertexAttribPointer(
-        //     fragment_color_attrib,
-        //     2,
-        //     gl::FLOAT,
-        //     gl::FALSE as GLboolean,
-        //     0,
-        //     ptr::null());
     }
 
     info!("successfully initialized static data");
@@ -171,7 +142,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         let mvp_array = util::arrayify_mat4(mvp);
 
         unsafe {
-            gl::ClearColor(0.3, 0.3, 0.3, 1.0);
+            gl::ClearColor(0.0, 0.0, 0.0, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
             // TODO: We have to use the program before we set the MVP matrix, but that's something that should
             // probably also be pushed to the object since it has model coordinates?

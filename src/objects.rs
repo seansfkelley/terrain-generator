@@ -107,6 +107,26 @@ impl <'a> RenderableObject<'a> {
                     ptr::null());
                 assert_no_gl_error();
 
+                // set current array data buffer and fill it with vertex "color" data (reusing position for now for test)
+                let mut v_color_buffer: GLuint = 0;
+                gl::GenBuffers(1, &mut v_color_buffer);
+                gl::BindBuffer(gl::ARRAY_BUFFER, v_color_buffer);
+                gl::BufferData(
+                    gl::ARRAY_BUFFER,
+                    (flattened_vertices.len() * size_of::<GLfloat>()) as GLsizeiptr,
+                    flattened_vertices.as_ptr() as *const _,
+                    gl::STATIC_DRAW);
+
+                let fragment_color_attrib = self.program.get_attrib("in_FragmentColor") as GLuint;
+                gl::EnableVertexAttribArray(fragment_color_attrib);
+                gl::VertexAttribPointer(
+                    fragment_color_attrib,
+                    3,
+                    gl::FLOAT,
+                    gl::FALSE as GLboolean,
+                    0,
+                    ptr::null());
+
                 // lastly, tell OpenGL about the indices (that must be correlated for all buffers!)
                 let mut index_buffer: GLuint = 0;
                 gl::GenBuffers(1, &mut index_buffer);
