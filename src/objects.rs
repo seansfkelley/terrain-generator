@@ -101,30 +101,6 @@ impl <'a> RenderableObject<'a> {
 
             match self.material {
                 Some(ref material) => {
-                    // let mut material_index: GLint = -1;
-                    // let material_indices = self
-                    //     .object
-                    //     .geometry
-                    //     .iter()
-                    //     .map(|g| {
-                    //         match g.material_name {
-                    //             Some(ref name) => name.clone(),
-                    //             None => DEFAULT_MATERIAL_NAME.to_owned(),
-                    //         }
-                    //     })
-                    //     .collect::<HashSet<String>>()
-                    //     .into_iter()
-                    //     .map(|n| {
-                    //         material_index += 1;
-                    //         return (n, material_index);
-                    //     })
-                    //     .collect::<HashMap<String, GLint>>();
-
-                    // let flattened_colors: Vec<GLfloat> = material_indices
-                    //     .keys()
-                    //     .flat_map(|k| flatten_color(material.get(k).unwrap().color_ambient).into_iter())
-                    //     .collect();
-
                     let mut ordered_vertex_colors: Vec<(usize, mtl::Color)> = self
                         .object
                         .geometry
