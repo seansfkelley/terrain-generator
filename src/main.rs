@@ -104,17 +104,6 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     glfw.poll_events();
     controls::init_window_controls(window);
 
-    let vs = shaders::compile_shader("./shaders/basic_w_color.vert", gl::VERTEX_SHADER);
-    let fs = shaders::compile_shader("./shaders/given_color.frag", gl::FRAGMENT_SHADER);
-    let program = shaders::Program::new(vs, fs, vec!["mvp"], vec!["in_Position", "in_FragmentColor"]);
-
-    let obj_file = obj::parse(file::read_file_contents("./objects/icosahedron.obj"))
-        .unwrap();
-
-    let mut o = objects::RenderableObject::new(obj_file.objects[1].clone(), &program);
-
-    info!("successfully created shaders/program");
-
     unsafe {
         gl::Enable(gl::CULL_FACE);
         gl::Enable(gl::DEPTH_TEST);
@@ -122,13 +111,21 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         assert_no_gl_error();
     }
 
+    let vs = shaders::compile_shader("./shaders/basic_w_color.vert", gl::VERTEX_SHADER);
+    let fs = shaders::compile_shader("./shaders/given_color.frag", gl::FRAGMENT_SHADER);
+    let program = shaders::Program::new(vs, fs, vec!["mvp"], vec!["in_Position", "in_FragmentColor"]);
+    info!("successfully created shaders/program");
+
+    let obj_file = obj::parse(file::read_file_contents("./objects/icosahedron.obj"))
+        .unwrap();
+    let mut o = objects::RenderableObject::new(obj_file.objects[1].clone(), &program);
     info!("successfully initialized static data");
-    info!("beginning event loop");
 
     let mut last_time = glfw.get_time() as f32;
     let mut camera = camera::Camera::new();
     camera.translate(camera::TranslateDirection::Forward, -2.0);
 
+    info!("beginning event loop");
     while !window.should_close() {
         let t = glfw.get_time() as f32;
         let delta_t = t - last_time;
