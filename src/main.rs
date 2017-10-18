@@ -17,13 +17,13 @@ mod util;
 mod file;
 mod objects;
 
-use std::ptr;
+use std::{ ptr, path };
 use std::os::raw::{ c_void, c_char };
 use std::ffi::CStr;
 use std::sync::mpsc::Receiver;
 use glfw::Context;
 use gl::types::*;
-use wavefront_obj::obj;
+use wavefront_obj::{ obj, mtl };
 use util::assert_no_gl_error;
 
 const WIDTH: u32 = 800;
@@ -116,18 +116,19 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     info!("successfully created shaders/program");
 
     let load_local_object = |name| -> objects::RenderableObject {
-        objects::RenderableObject::new(
-            obj::parse(file::read_file_contents(format!("./objects/{}.obj", name)))
-                .unwrap()
-                .objects
-                [1]
-                .clone(), &program)
+        let p = path::Path::new("./objects");
+        let o = obj::parse(file::read_file_contents(&*p.join(name))).unwrap();
+        let m = match o.material_library {
+            Some(mtl_name) => Some(mtl::parse(file::read_file_contents(&*p.join(mtl_name))).unwrap()),
+            None => None,
+        };
+        objects::RenderableObject::new(o.objects[1].clone(), m, &program)
     };
 
     let mut renderables = vec![
-        load_local_object("icosahedron"),
-        load_local_object("dodecahedron"),
-        load_local_object("shuttle")
+        load_local_object("icosahedron.obj"),
+        load_local_object("dodecahedron.obj"),
+        load_local_object("shuttle.obj")
     ];
     info!("successfully initialized static data");
 

@@ -5,7 +5,7 @@ use gl;
 use gl::types::*;
 use glm;
 use num_traits::identities::One;
-use wavefront_obj::obj;
+use wavefront_obj::{ obj, mtl };
 use util::assert_no_gl_error;
 
 use shaders;
@@ -13,6 +13,7 @@ use util;
 
 pub struct RenderableObject<'a> {
     object: obj::Object,
+    material: Option<mtl::MtlSet>,
     program: &'a shaders::Program,
     initialized: bool,
     vao: GLuint,
@@ -20,9 +21,10 @@ pub struct RenderableObject<'a> {
 }
 
 impl <'a> RenderableObject<'a> {
-    pub fn new(object: obj::Object, program: &shaders::Program) -> RenderableObject {
+    pub fn new(object: obj::Object, material: Option<mtl::MtlSet>, program: &shaders::Program) -> RenderableObject {
         RenderableObject {
             object: object,
+            material: material,
             program: program,
             initialized: false,
             vao: 0,

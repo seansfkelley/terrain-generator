@@ -1,6 +1,6 @@
 extern crate gl;
 
-use std::{ ptr, str };
+use std::{ ptr, str, path };
 use std::vec::Vec;
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -12,7 +12,7 @@ use util::assert_no_gl_error;
 pub fn compile_shader(filename: &str, type_: GLenum) -> GLuint {
     info!("loading shader from {} of type 0x{:X}", filename, type_);
 
-    let shader_src = file::read_file_contents(filename);
+    let shader_src = file::read_file_contents(path::Path::new(filename));
     let shader;
 
     unsafe {
