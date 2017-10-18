@@ -143,7 +143,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         let delta_t = t - last_time;
         last_time = t;
 
-        controls::move_camera_from_mouse(&mut camera, window, delta_t);
+        controls::move_camera_from_inputs(&mut camera, window, delta_t);
 
         let view = camera.view_mat();
         let projection = camera.projection_mat(ASPECT_RATIO);
