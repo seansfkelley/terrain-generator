@@ -70,9 +70,10 @@ impl Program {
     pub fn new(vertex_shader: GLuint, fragment_shader: GLuint, uniforms: Vec<&str>, attribs: Vec<&str>) -> Program {
         info!("creating program with vertex shader {} and fragment shader {}", vertex_shader, fragment_shader);
 
+        let program;
         unsafe {
-            debug!("creating shader");
-            let program = gl::CreateProgram();
+            debug!("creating program");
+            program = gl::CreateProgram();
             assert_ne!(program, 0, "error creating program");
             assert_no_gl_error();
 
@@ -116,36 +117,38 @@ impl Program {
                 debug!("blowing up");
                 panic!("{}", str::from_utf8(buf.as_slice()).ok().expect("ProgramInfoLog not valid utf8").trim());
             }
+        }
 
-            info!("successfully created program with id {}", program);
+        info!("successfully created program with id {}", program);
 
-            debug!("fetching uniform locations");
-            let mut uniforms_map: HashMap<String, GLint> = HashMap::new();
-            for u in uniforms {
-                debug!("fetching for uniform {}", u);
-                let location = gl::GetUniformLocation(program, CString::new(u.as_bytes()).unwrap().as_ptr());
-                assert_no_gl_error();
-                assert_ne!(location, -1i32, "uniform {} not found in program", location);
-                debug!("received location {}", location);
-                uniforms_map.insert(u.to_owned(), location);
-            }
+        debug!("fetching uniform locations");
+        let mut uniforms_map: HashMap<String, GLint> = HashMap::new();
+        for u in uniforms {
+            debug!("fetching for uniform {}", u);
+            let location;
+            unsafe { location = gl::GetUniformLocation(program, CString::new(u.as_bytes()).unwrap().as_ptr()); }
+            assert_no_gl_error();
+            assert_ne!(location, -1i32, "uniform {} not found in program", location);
+            debug!("received location {}", location);
+            uniforms_map.insert(u.to_owned(), location);
+        }
 
-            debug!("fetching attribute locations");
-            let mut attribs_map: HashMap<String, GLint> = HashMap::new();
-            for a in attribs {
-                debug!("fetching for attribute {}", a);
-                let location = gl::GetAttribLocation(program, CString::new(a.as_bytes()).unwrap().as_ptr());
-                assert_no_gl_error();
-                assert_ne!(location, -1i32, "attribute {} not found in program", location);
-                debug!("received location {}", location);
-                attribs_map.insert(a.to_owned(), location);
-            }
+        debug!("fetching attribute locations");
+        let mut attribs_map: HashMap<String, GLint> = HashMap::new();
+        for a in attribs {
+            debug!("fetching for attribute {}", a);
+            let location;
+            unsafe { location = gl::GetAttribLocation(program, CString::new(a.as_bytes()).unwrap().as_ptr()); }
+            assert_no_gl_error();
+            assert_ne!(location, -1i32, "attribute {} not found in program", location);
+            debug!("received location {}", location);
+            attribs_map.insert(a.to_owned(), location);
+        }
 
-            Program {
-                name: program,
-                uniforms: uniforms_map,
-                attribs: attribs_map,
-            }
+        Program {
+            name: program,
+            uniforms: uniforms_map,
+            attribs: attribs_map,
         }
     }
 
