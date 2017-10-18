@@ -133,7 +133,8 @@ impl <'a> RenderableObject<'a> {
                             g
                                 .shapes
                                 .iter()
-                                .flat_map(|s| {
+                                .flat_map(move |s| {
+                                    let g1 = g.clone();
                                     match s.primitive {
                                         obj::Primitive::Triangle(
                                             (v1, _, _),
