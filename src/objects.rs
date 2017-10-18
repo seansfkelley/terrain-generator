@@ -141,11 +141,10 @@ impl <'a> RenderableObject<'a> {
                                             (v3, _, _),
                                         ) => {
                                             // we'll want to duplicate vertices that appear in two different materials, eventually
-                                            let color = DEFAULT_COLOR;
-                                            // let color = match g.material_name {
-                                            //     Some(name) => material.get(&name).unwrap().color_ambient,
-                                            //     None => DEFAULT_COLOR,
-                                            // };
+                                            let color = match g1.material_name {
+                                                Some(name) => material.get(&name).unwrap().color_ambient,
+                                                None => DEFAULT_COLOR,
+                                            };
                                             vec![(v1, color), (v2, color), (v3, color)].into_iter()
                                         },
                                         _ => { panic!("got non-triangle primitive"); },
