@@ -12,10 +12,29 @@ use util::assert_no_gl_error;
 use shaders;
 use util;
 
-static DEFAULT_COLOR: mtl::Color= mtl::Color { r: 1.0, g: 1.0, b: 1.0 };
+lazy_static! {
+    static ref DEFAULT_MATERIAL: mtl::Material = mtl::Material {
+        name: "default material".to_owned(),
+        specular_coefficient: 0.0,
+        color_ambient: mtl::Color { r: 1.0, g: 1.0, b: 1.0 },
+        color_diffuse: mtl::Color { r: 1.0, g: 1.0, b: 1.0 },
+        color_specular: mtl::Color { r: 1.0, g: 1.0, b: 1.0 },
+        color_emissive: Option::None,
+        optical_density: Option::None,
+        alpha: 1.0,
+        illumination: mtl::Illumination::Ambient,
+        uv_map: Option::None,
+    };
+}
 
 fn flatten_color(color: mtl::Color) -> Vec<f32> {
     return vec![color.r as f32, color.g as f32, color.b as f32];
+}
+
+struct RenderableChunk<'a> {
+    material: &'a mtl::Material,
+    vertices: Vec<obj::Vertex>,
+    triangles: Vec<obj::Shape>,
 }
 
 pub struct RenderableObject<'a> {
@@ -58,6 +77,47 @@ impl <'a> RenderableObject<'a> {
         if !self.initialized {
             self.initialized = true;
 
+            let mut renderable_chunks: Vec<RenderableChunk> = self
+                .object
+                .geometry
+                .iter()
+                .map(|g| {
+                    let material;
+                    // Nested options are pretty sad. :/
+                    if self.material.is_some() && g.material_name.is_some() {
+                        material = self.material.as_ref().unwrap().get(g.material_name.as_ref().unwrap()).unwrap_or(&DEFAULT_MATERIAL);
+                    } else {
+                        material = &DEFAULT_MATERIAL;
+                    }
+                    RenderableChunk {
+                        material: material,
+                        vertices: vec![],
+                        triangles: vec![],
+                    }
+                    // g
+                    //     .shapes
+                    //     .iter()
+                    //     .flat_map(move |s| {
+                    //         let g1 = g.clone();
+                    //         match s.primitive {
+                    //             obj::Primitive::Triangle(
+                    //                 (v1, _, _),
+                    //                 (v2, _, _),
+                    //                 (v3, _, _),
+                    //             ) => {
+                    //                 // we'll want to duplicate vertices that appear in two different materials, eventually
+                    //                 let color = match g1.material_name {
+                    //                     Some(name) => material.get(&name).unwrap().color_ambient,
+                    //                     None => DEFAULT_COLOR,
+                    //                 };
+                    //                 vec![(v1, color), (v2, color), (v3, color)].into_iter()
+                    //             },
+                    //             _ => { panic!("got non-triangle primitive"); },
+                    //         }
+                    //     })
+                })
+                .collect();
+
             unsafe {
                 // create the VAO for this object
                 gl::GenVertexArrays(1, &mut self.vao);
@@ -99,71 +159,71 @@ impl <'a> RenderableObject<'a> {
                 }
             }
 
-            match self.material {
-                Some(ref material) => {
-                    let mut ordered_vertex_colors: Vec<(usize, mtl::Color)> = self
-                        .object
-                        .geometry
-                        .iter()
-                        .flat_map(|g| {
-                            g
-                                .shapes
-                                .iter()
-                                .flat_map(move |s| {
-                                    let g1 = g.clone();
-                                    match s.primitive {
-                                        obj::Primitive::Triangle(
-                                            (v1, _, _),
-                                            (v2, _, _),
-                                            (v3, _, _),
-                                        ) => {
-                                            // we'll want to duplicate vertices that appear in two different materials, eventually
-                                            let color = match g1.material_name {
-                                                Some(name) => material.get(&name).unwrap().color_ambient,
-                                                None => DEFAULT_COLOR,
-                                            };
-                                            vec![(v1, color), (v2, color), (v3, color)].into_iter()
-                                        },
-                                        _ => { panic!("got non-triangle primitive"); },
-                                    }
-                                })
-                        })
-                        .collect::<Vec<(usize, mtl::Color)>>();
+            // match self.material {
+            //     Some(ref material) => {
+            //         let mut ordered_vertex_colors: Vec<(usize, mtl::Color)> = self
+            //             .object
+            //             .geometry
+            //             .iter()
+            //             .flat_map(|g| {
+            //                 g
+            //                     .shapes
+            //                     .iter()
+            //                     .flat_map(move |s| {
+            //                         let g1 = g.clone();
+            //                         match s.primitive {
+            //                             obj::Primitive::Triangle(
+            //                                 (v1, _, _),
+            //                                 (v2, _, _),
+            //                                 (v3, _, _),
+            //                             ) => {
+            //                                 // we'll want to duplicate vertices that appear in two different materials, eventually
+            //                                 let color = match g1.material_name {
+            //                                     Some(name) => material.get(&name).unwrap().color_ambient,
+            //                                     None => DEFAULT_COLOR,
+            //                                 };
+            //                                 vec![(v1, color), (v2, color), (v3, color)].into_iter()
+            //                             },
+            //                             _ => { panic!("got non-triangle primitive"); },
+            //                         }
+            //                     })
+            //             })
+            //             .collect::<Vec<(usize, mtl::Color)>>();
 
-                    ordered_vertex_colors.sort_by(|t0, t1| t0.0.cmp(&t1.0));
+            //         ordered_vertex_colors.sort_by(|t0, t1| t0.0.cmp(&t1.0));
 
-                    let flattened_vertex_colors: Vec<GLfloat> = ordered_vertex_colors
-                        .iter()
-                        .flat_map(|t| flatten_color(t.1).into_iter())
-                        .collect();
+            //         let flattened_vertex_colors: Vec<GLfloat> = ordered_vertex_colors
+            //             .iter()
+            //             .flat_map(|t| flatten_color(t.1).into_iter())
+            //             .collect();
 
-                    unsafe {
-                        // set current array data buffer and fill it with vertex "color" data
-                        let mut v_color_buffer: GLuint = 0;
-                        gl::GenBuffers(1, &mut v_color_buffer);
-                        gl::BindBuffer(gl::ARRAY_BUFFER, v_color_buffer);
-                        gl::BufferData(
-                            gl::ARRAY_BUFFER,
-                            (flattened_vertex_colors.len() * size_of::<GLfloat>()) as GLsizeiptr,
-                            flattened_vertex_colors.as_ptr() as *const _,
-                            gl::STATIC_DRAW);
+            //         unsafe {
+            //             // set current array data buffer and fill it with vertex "color" data
+            //             let mut v_color_buffer: GLuint = 0;
+            //             gl::GenBuffers(1, &mut v_color_buffer);
+            //             gl::BindBuffer(gl::ARRAY_BUFFER, v_color_buffer);
+            //             gl::BufferData(
+            //                 gl::ARRAY_BUFFER,
+            //                 (flattened_vertex_colors.len() * size_of::<GLfloat>()) as GLsizeiptr,
+            //                 flattened_vertex_colors.as_ptr() as *const _,
+            //                 gl::STATIC_DRAW);
 
-                        let fragment_color_attrib = self.program.get_attrib("in_FragmentColor") as GLuint;
-                        gl::EnableVertexAttribArray(fragment_color_attrib);
-                        gl::VertexAttribPointer(
-                            fragment_color_attrib,
-                            3,
-                            gl::FLOAT,
-                            gl::FALSE as GLboolean,
-                            0,
-                            ptr::null());
-                    }
-                },
-                None => {
-                    // TODO: Some sane default scheme?
-                    info!("no material provided, will render default");
-                }
-            }
+            //             let fragment_color_attrib = self.program.get_attrib("in_FragmentColor") as GLuint;
+            //             gl::EnableVertexAttribArray(fragment_color_attrib);
+            //             gl::VertexAttribPointer(
+            //                 fragment_color_attrib,
+            //                 3,
+            //                 gl::FLOAT,
+            //                 gl::FALSE as GLboolean,
+            //                 0,
+            //                 ptr::null());
+            //         }
+            //     },
+            //     None => {
+            //         // TODO: Some sane default scheme?
+            //         info!("no material provided, will render default");
+            //     }
+            // }
 
             {
                 let vertex_indices: Vec<u32> = self
