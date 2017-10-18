@@ -17,7 +17,7 @@ mod util;
 mod file;
 mod objects;
 
-use std::{ ptr, path };
+use std::{ ptr, path, collections };
 use std::os::raw::{ c_void, c_char };
 use std::ffi::CStr;
 use std::sync::mpsc::Receiver;
@@ -99,6 +99,15 @@ fn main() {
     render(&mut glfw, &mut window, events);
 }
 
+fn mapify_mtl(mtl_set: mtl::MtlSet) -> collections::HashMap<String, mtl::Material> {
+    let mut map = collections::HashMap::new();
+    for m in mtl_set.materials {
+        // TODO: Compiles, but seems bleh. Need to understand borrowing semantics better.
+        map.insert(m.name.clone(), m.clone());
+    }
+    map
+}
+
 fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f64, glfw::WindowEvent)>) {
     glfw.poll_events();
     controls::init_window_controls(window);
@@ -119,7 +128,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         let p = path::Path::new("./objects");
         let o = obj::parse(file::read_file_contents(&*p.join(name))).unwrap();
         let m = match o.material_library {
-            Some(mtl_name) => Some(mtl::parse(file::read_file_contents(&*p.join(mtl_name))).unwrap()),
+            Some(mtl_name) => Some(mapify_mtl(mtl::parse(file::read_file_contents(&*p.join(mtl_name))).unwrap())),
             None => None,
         };
         objects::RenderableObject::new(o.objects[1].clone(), m, &program)
@@ -132,7 +141,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     ];
     info!("successfully initialized static data");
 
-    let mut object_to_render = 1;
+    let mut object_to_render = 3;
 
     let mut last_time = glfw.get_time() as f32;
     let mut camera = camera::Camera::new();
