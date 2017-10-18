@@ -22,7 +22,6 @@ use std::ptr;
 use std::os::raw::{ c_void, c_char };
 use std::ffi::CStr;
 use std::sync::mpsc::Receiver;
-use num_traits::identities::One;
 use glfw::Context;
 use gl::types::*;
 use wavefront_obj::obj;
@@ -137,19 +136,13 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
 
         controls::move_camera_from_mouse(&mut camera, window, delta_t);
 
-        let model_mat = glm::Mat4::one();
-        let mvp = camera.projection_mat(ASPECT_RATIO) * camera.view_mat() * model_mat;
-        let mvp_array = util::arrayify_mat4(mvp);
+        let view = camera.view_mat();
+        let projection = camera.projection_mat(ASPECT_RATIO);
 
         unsafe {
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-            // TODO: We have to use the program before we set the MVP matrix, but that's something that should
-            // probably also be pushed to the object since it has model coordinates?
-            gl::UseProgram(program.name);
-            gl::UniformMatrix4fv(program.get_uniform("mvp"), 1, gl::FALSE, &*mvp_array as *const f32);
-            assert_no_gl_error();
-            o.render();
+            o.render(view, projection);
         }
 
         window.swap_buffers();

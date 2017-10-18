@@ -3,10 +3,13 @@ use std::mem::size_of;
 use std::ptr;
 use gl;
 use gl::types::*;
+use glm;
+use num_traits::identities::One;
 use wavefront_obj::obj;
 use util::assert_no_gl_error;
 
 use shaders;
+use util;
 
 pub struct RenderableObject<'a> {
     object: obj::Object,
@@ -27,11 +30,16 @@ impl <'a> RenderableObject<'a> {
         }
     }
 
-    pub fn render(&mut self) {
+    pub fn render(&mut self, view: glm::Mat4, projection: glm::Mat4) {
         self.lazy_init();
+
+        let model = glm::Mat4::one();
+        let mvp = projection * view * model;
+        let mvp_array = util::arrayify_mat4(mvp);
 
         unsafe {
             gl::UseProgram(self.program.name);
+            gl::UniformMatrix4fv(self.program.get_uniform("mvp"), 1, gl::FALSE, &*mvp_array as *const f32);
             gl::BindVertexArray(self.vao);
             gl::DrawElements(gl::TRIANGLES, self.indices, gl::UNSIGNED_INT, ptr::null());
         }
@@ -76,8 +84,8 @@ impl <'a> RenderableObject<'a> {
             unsafe {
                 // TODO: Is this necessary?
                 // use the appropriate program so we can fetch information about it
-                gl::UseProgram(self.program.name);
-                assert_no_gl_error();
+                // gl::UseProgram(self.program.name);
+                // assert_no_gl_error();
 
                 // create the VAO for this object
                 gl::GenVertexArrays(1, &mut self.vao);
