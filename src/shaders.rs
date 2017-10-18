@@ -88,6 +88,11 @@ impl Program {
             gl::LinkProgram(program);
             assert_no_gl_error();
 
+            debug!("detaching shaders");
+            gl::DetachShader(program, vertex_shader);
+            gl::DetachShader(program, fragment_shader);
+            assert_no_gl_error();
+
             debug!("checking program status");
             let mut status = gl::FALSE as GLint;
             gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
@@ -95,15 +100,18 @@ impl Program {
 
             if status != (gl::TRUE as GLint) {
                 debug!("program failed to initialize, collecting information");
-                let mut len: GLint = 0;
 
                 debug!("fetching log length");
+                let mut len: GLint = 0;
                 gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut len);
 
                 debug!("fetching log content (length {})", len);
                 let mut buf = Vec::<u8>::with_capacity(len as usize - 1);
                 buf.set_len((len as usize) - 1); // subtract 1 to skip the trailing null character
                 gl::GetProgramInfoLog(program, len, ptr::null_mut(), buf.as_mut_ptr() as *mut GLchar);
+
+                debug!("deleting program");
+                gl::DeleteProgram(program);
 
                 debug!("blowing up");
                 panic!("{}", str::from_utf8(buf.as_slice()).ok().expect("ProgramInfoLog not valid utf8").trim());
