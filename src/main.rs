@@ -115,20 +115,19 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     let program = shaders::Program::new(vs, fs, vec!["mvp"], vec!["in_Position", "in_FragmentColor"]);
     info!("successfully created shaders/program");
 
+    let load_local_object = |name| -> objects::RenderableObject {
+        objects::RenderableObject::new(
+            obj::parse(file::read_file_contents(format!("./objects/{}.obj", name)))
+                .unwrap()
+                .objects
+                [1]
+                .clone(), &program)
+    };
+
     let mut renderables = vec![
-        objects::RenderableObject::new(
-            obj::parse(file::read_file_contents("./objects/icosahedron.obj"))
-                .unwrap()
-                .objects
-                [1]
-                .clone(), &program)
-    ,
-        objects::RenderableObject::new(
-            obj::parse(file::read_file_contents("./objects/dodecahedron.obj"))
-                .unwrap()
-                .objects
-                [1]
-                .clone(), &program)
+        load_local_object("icosahedron"),
+        load_local_object("dodecahedron"),
+        load_local_object("shuttle")
     ];
     info!("successfully initialized static data");
 
