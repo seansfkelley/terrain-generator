@@ -82,11 +82,6 @@ impl <'a> RenderableObject<'a> {
             self.indices = flattened_triangle_indices.len() as i32;
 
             unsafe {
-                // TODO: Is this necessary?
-                // use the appropriate program so we can fetch information about it
-                // gl::UseProgram(self.program.name);
-                // assert_no_gl_error();
-
                 // create the VAO for this object
                 gl::GenVertexArrays(1, &mut self.vao);
                 gl::BindVertexArray(self.vao);
