@@ -14,7 +14,6 @@ mod shaders;
 mod controls;
 mod camera;
 mod util;
-mod event_handlers;
 mod file;
 mod objects;
 
@@ -116,10 +115,24 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     let program = shaders::Program::new(vs, fs, vec!["mvp"], vec!["in_Position", "in_FragmentColor"]);
     info!("successfully created shaders/program");
 
-    let obj_file = obj::parse(file::read_file_contents("./objects/icosahedron.obj"))
-        .unwrap();
-    let mut o = objects::RenderableObject::new(obj_file.objects[1].clone(), &program);
+    let mut renderables = vec![
+        objects::RenderableObject::new(
+            obj::parse(file::read_file_contents("./objects/icosahedron.obj"))
+                .unwrap()
+                .objects
+                [1]
+                .clone(), &program)
+    ,
+        objects::RenderableObject::new(
+            obj::parse(file::read_file_contents("./objects/dodecahedron.obj"))
+                .unwrap()
+                .objects
+                [1]
+                .clone(), &program)
+    ];
     info!("successfully initialized static data");
+
+    let mut object_to_render = 1;
 
     let mut last_time = glfw.get_time() as f32;
     let mut camera = camera::Camera::new();
@@ -139,14 +152,55 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         unsafe {
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-            o.render(view, projection);
+            let index_to_render = object_to_render - 1;
+            if index_to_render < renderables.len() {
+                renderables[index_to_render].render(view, projection);
+            }
         }
 
         window.swap_buffers();
         glfw.poll_events();
 
         for (_, event) in glfw::flush_messages(&events) {
-            event_handlers::handle_window_event(window, event);
+            debug!("received event: {:?}", event);
+            match event {
+                glfw::WindowEvent::Key(glfw::Key::Escape, _, glfw::Action::Press, _) => {
+                    info!("received esc key, will close window");
+                    window.set_should_close(true);
+                },
+                // TODO: There's got to be some idiomatic way to do this.
+                glfw::WindowEvent::Key(glfw::Key::Num1, _, glfw::Action::Press, _) => {
+                    object_to_render = 1;
+                },
+                glfw::WindowEvent::Key(glfw::Key::Num2, _, glfw::Action::Press, _) => {
+                    object_to_render = 2;
+                },
+                glfw::WindowEvent::Key(glfw::Key::Num3, _, glfw::Action::Press, _) => {
+                    object_to_render = 3;
+                },
+                glfw::WindowEvent::Key(glfw::Key::Num4, _, glfw::Action::Press, _) => {
+                    object_to_render = 4;
+                },
+                glfw::WindowEvent::Key(glfw::Key::Num5, _, glfw::Action::Press, _) => {
+                    object_to_render = 5;
+                },
+                glfw::WindowEvent::Key(glfw::Key::Num6, _, glfw::Action::Press, _) => {
+                    object_to_render = 6;
+                },
+                glfw::WindowEvent::Key(glfw::Key::Num7, _, glfw::Action::Press, _) => {
+                    object_to_render = 7;
+                },
+                glfw::WindowEvent::Key(glfw::Key::Num8, _, glfw::Action::Press, _) => {
+                    object_to_render = 8;
+                },
+                glfw::WindowEvent::Key(glfw::Key::Num9, _, glfw::Action::Press, _) => {
+                    object_to_render = 9;
+                },
+                glfw::WindowEvent::Key(glfw::Key::Num0, _, glfw::Action::Press, _) => {
+                    object_to_render = 10;
+                },
+                _ => {}
+            }
         }
     }
 }
