@@ -9,9 +9,13 @@ in vec3 in_VertexPosition;
 in vec3 in_VertexNormal;
 in vec3 in_ColorAmbient;
 in vec3 in_ColorDiffuse;
+in vec3 in_ColorSpecular;
+in float in_SpecularExponent;
 
 out vec3 out_ColorAmbient;
 out vec3 out_ColorDiffuse;
+out vec3 out_ColorSpecular;
+out float out_SpecularExponent;
 out vec3 out_VertexPosition_WorldSpace;
 out vec3 out_EyeDirection_CameraSpace;
 out vec3 out_LightDirection_CameraSpace;
@@ -33,4 +37,6 @@ void main() {
 
     out_ColorAmbient = in_ColorAmbient;
     out_ColorDiffuse = in_ColorDiffuse;
+    out_ColorSpecular = in_ColorSpecular;
+    out_SpecularExponent = in_SpecularExponent;
 }

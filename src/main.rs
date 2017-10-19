@@ -141,8 +141,8 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     let program_phong = shaders::Program::new(
         vs_phong,
         fs_phong,
-        vec!["u_MatMvp", "u_MatV", "u_MatM", "u_LightPosition_WorldSpace"],
-        vec!["in_VertexPosition", "in_VertexNormal", "in_ColorAmbient", "in_ColorDiffuse"]
+        vec!["u_MatMvp", "u_MatV", "u_MatM", "u_LightPosition_WorldSpace"], // "u_LightColor", "u_LightIntensity"
+        vec!["in_VertexPosition", "in_VertexNormal", "in_ColorAmbient", "in_ColorDiffuse", "in_ColorSpecular", "in_SpecularExponent"]
     );
 
     info!("successfully created shaders/program");

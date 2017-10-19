@@ -13,37 +13,36 @@ use util::assert_no_gl_error;
 use shaders;
 use util;
 
-trait SwizzleXyz {
-    fn x(&self) -> GLfloat;
-    fn y(&self) -> GLfloat;
-    fn z(&self) -> GLfloat;
+trait Flattenable {
+    fn component_count() -> u32;
+    fn append_components_to(&self, vector: &mut Vec<GLfloat>);
 }
 
-impl SwizzleXyz for glm::Vec3 {
-    fn x(&self) -> GLfloat {
-        self.x
-    }
+impl Flattenable for GLfloat {
+    fn component_count() -> u32 { 1 }
 
-    fn y(&self) -> GLfloat {
-        self.y
-    }
-
-    fn z(&self) -> GLfloat {
-        self.z
+    fn append_components_to(&self, vector: &mut Vec<GLfloat>) {
+        vector.push(*self);
     }
 }
 
-impl SwizzleXyz for mtl::Color {
-    fn x(&self) -> GLfloat {
-        self.r as GLfloat
-    }
+impl Flattenable for glm::Vec3 {
+    fn component_count()  -> u32 { 3 }
 
-    fn y(&self) -> GLfloat {
-        self.g as GLfloat
+    fn append_components_to(&self, vector: &mut Vec<GLfloat>) {
+        vector.push(self.x);
+        vector.push(self.y);
+        vector.push(self.z);
     }
+}
 
-    fn z(&self) -> GLfloat {
-        self.b as GLfloat
+impl Flattenable for mtl::Color {
+    fn component_count()  -> u32 { 3 }
+
+    fn append_components_to(&self, vector: &mut Vec<GLfloat>) {
+        vector.push(self.r as GLfloat);
+        vector.push(self.g as GLfloat);
+        vector.push(self.b as GLfloat);
     }
 }
 
@@ -52,15 +51,17 @@ lazy_static! {
         name: "default material".to_owned(),
         specular_coefficient: 0.0,
         color_ambient: mtl::Color { r: 0.5, g: 0.5, b: 0.5 },
-        color_diffuse: mtl::Color { r: 1.0, g: 1.0, b: 1.0 },
+        color_diffuse: mtl::Color { r: 0.5, g: 0.5, b: 0.5 },
         color_specular: mtl::Color { r: 1.0, g: 1.0, b: 1.0 },
         color_emissive: Option::None,
         optical_density: Option::None,
         alpha: 1.0,
-        illumination: mtl::Illumination::Ambient,
+        illumination: mtl::Illumination::AmbientDiffuse,
         uv_map: Option::None,
     };
 }
+
+static BLACK: mtl::Color = mtl::Color { r: 0.0, g: 0.0, b: 0.0 };
 
 #[derive(Debug)]
 struct RenderableChunk<'a> {
@@ -76,7 +77,7 @@ pub struct RenderableObject<'a> {
     program: &'a shaders::Program,
     loaded: bool,
     vao: GLuint,
-    indices: i32,
+    triangle_count: i32,
 }
 
 impl <'a> RenderableObject<'a> {
@@ -87,7 +88,7 @@ impl <'a> RenderableObject<'a> {
             program: program,
             loaded: false,
             vao: 0,
-            indices: 0,
+            triangle_count: 0,
         }
     }
 
@@ -109,7 +110,7 @@ impl <'a> RenderableObject<'a> {
             gl::UniformMatrix4fv(self.program.get_uniform("u_MatM"), 1, gl::FALSE, &*m_array as *const f32);
             gl::Uniform3f(self.program.get_uniform("u_LightPosition_WorldSpace"), light_position[0], light_position[1], light_position[2]);
             gl::BindVertexArray(self.vao);
-            gl::DrawElements(gl::TRIANGLES, self.indices, gl::UNSIGNED_INT, ptr::null());
+            gl::DrawElements(gl::TRIANGLES, self.triangle_count, gl::UNSIGNED_INT, ptr::null());
         }
     }
 
@@ -252,12 +253,10 @@ impl <'a> RenderableObject<'a> {
             .collect()
     }
 
-    fn create_array_buffer<T: SwizzleXyz>(&self, attribute_name: &str, triples: Vec<T>) {
-        let mut flattened_triples: Vec<GLfloat> = Vec::with_capacity(triples.len() * 3);
-        for t in triples {
-            flattened_triples.push(t.x());
-            flattened_triples.push(t.y());
-            flattened_triples.push(t.z());
+    fn create_array_buffer<T: Flattenable>(&self, attribute_name: &str, items: Vec<T>) {
+        let mut flattened_items: Vec<GLfloat> = vec![];
+        for i in items {
+            i.append_components_to(&mut flattened_items);
         }
 
         unsafe {
@@ -266,8 +265,8 @@ impl <'a> RenderableObject<'a> {
             gl::BindBuffer(gl::ARRAY_BUFFER, array_buffer_name);
             gl::BufferData(
                 gl::ARRAY_BUFFER,
-                (flattened_triples.len() * size_of::<GLfloat>()) as GLsizeiptr,
-                flattened_triples.as_ptr() as *const _,
+                (flattened_items.len() * size_of::<GLfloat>()) as GLsizeiptr,
+                flattened_items.as_ptr() as *const _,
                 gl::STATIC_DRAW);
             assert_no_gl_error();
 
@@ -275,7 +274,7 @@ impl <'a> RenderableObject<'a> {
             gl::EnableVertexAttribArray(attribute_location);
             gl::VertexAttribPointer(
                 attribute_location,
-                3,
+                T::component_count() as GLint,
                 gl::FLOAT,
                 gl::FALSE as GLboolean,
                 0,
@@ -315,8 +314,10 @@ impl <'a> RenderableObject<'a> {
 
                 let mut all_vertices: Vec<glm::Vec3> = vec![];
                 let mut all_normals: Vec<glm::Vec3> = vec![];
-                let mut all_color_ambient: Vec<mtl::Color> = vec![];
-                let mut all_color_diffuse: Vec<mtl::Color> = vec![];
+                let mut all_colors_ambient: Vec<mtl::Color> = vec![];
+                let mut all_colors_diffuse: Vec<mtl::Color> = vec![];
+                let mut all_colors_specular: Vec<mtl::Color> = vec![];
+                let mut all_specular_exponents: Vec<GLfloat> = vec![];
                 let mut indices: Vec<u32> = vec![];
 
                 let mut offset = 0;
@@ -324,9 +325,26 @@ impl <'a> RenderableObject<'a> {
                     for i in 0..c.vertices.len() {
                         all_vertices.push(c.vertices[i]);
                         all_normals.push(c.normals[i]);
-                        // TODO: Respect illumination type, which may not specify diffuse.
-                        all_color_ambient.push(c.material.color_ambient);
-                        all_color_diffuse.push(c.material.color_diffuse);
+                        match c.material.illumination {
+                            mtl::Illumination::Ambient => {
+                                all_colors_ambient.push(c.material.color_ambient);
+                                all_colors_diffuse.push(BLACK);
+                                all_colors_specular.push(BLACK);
+                                all_specular_exponents.push(1.0);
+                            },
+                            mtl::Illumination::AmbientDiffuse => {
+                                all_colors_ambient.push(c.material.color_ambient);
+                                all_colors_diffuse.push(c.material.color_diffuse);
+                                all_colors_specular.push(BLACK);
+                                all_specular_exponents.push(1.0);
+                            },
+                            mtl::Illumination::AmbientDiffuseSpecular => {
+                                all_colors_ambient.push(c.material.color_ambient);
+                                all_colors_diffuse.push(c.material.color_diffuse);
+                                all_colors_specular.push(c.material.color_specular);
+                                all_specular_exponents.push(c.material.specular_coefficient as GLfloat);
+                            },
+                        }
                     }
 
                     for t in c.triangles {
@@ -349,14 +367,16 @@ impl <'a> RenderableObject<'a> {
 
                 self.create_array_buffer("in_VertexPosition", all_vertices);
                 self.create_array_buffer("in_VertexNormal", all_normals);
-                self.create_array_buffer("in_ColorAmbient", all_color_ambient);
-                self.create_array_buffer("in_ColorDiffuse", all_color_diffuse);
+                self.create_array_buffer("in_ColorAmbient", all_colors_ambient);
+                self.create_array_buffer("in_ColorDiffuse", all_colors_diffuse);
+                self.create_array_buffer("in_ColorSpecular", all_colors_specular);
+                self.create_array_buffer("in_SpecularExponent", all_specular_exponents);
 
                 triangle_count = indices.len() as i32;
                 self.create_element_array_buffer(indices);
             }
 
-            self.indices = triangle_count;
+            self.triangle_count = triangle_count;
         }
     }
 }
