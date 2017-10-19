@@ -253,7 +253,7 @@ impl <'a> RenderableObject<'a> {
     }
 
     fn create_array_buffer<T: SwizzleXyz>(&self, attribute_name: &str, triples: Vec<T>) {
-        let mut flattened_triples: Vec<GLfloat> = vec![];
+        let mut flattened_triples: Vec<GLfloat> = Vec::with_capacity(triples.len() * 3);
         for t in triples {
             flattened_triples.push(t.x());
             flattened_triples.push(t.y());
@@ -303,7 +303,6 @@ impl <'a> RenderableObject<'a> {
             self.loaded = true;
 
             unsafe {
-                // create the VAO for this object
                 gl::GenVertexArrays(1, &mut self.vao);
                 gl::BindVertexArray(self.vao);
                 assert_no_gl_error();
