@@ -13,25 +13,37 @@ use util::assert_no_gl_error;
 use shaders;
 use util;
 
-trait Flattenable {
-    fn flatten(&self) -> Vec<GLfloat>;
+trait SwizzleXyz {
+    fn x(&self) -> GLfloat;
+    fn y(&self) -> GLfloat;
+    fn z(&self) -> GLfloat;
 }
 
-impl Flattenable for obj::Vertex {
-    fn flatten(&self) -> Vec<GLfloat> {
-        vec![self.x as f32, self.y as f32, self.z as f32]
+impl SwizzleXyz for glm::Vec3 {
+    fn x(&self) -> GLfloat {
+        self.x
+    }
+
+    fn y(&self) -> GLfloat {
+        self.y
+    }
+
+    fn z(&self) -> GLfloat {
+        self.z
     }
 }
 
-impl Flattenable for mtl::Color {
-    fn flatten(&self) -> Vec<GLfloat> {
-        vec![self.r as f32, self.g as f32, self.b as f32]
+impl SwizzleXyz for mtl::Color {
+    fn x(&self) -> GLfloat {
+        self.r as GLfloat
     }
-}
 
-impl Flattenable for glm::Vec3 {
-    fn flatten(&self) -> Vec<GLfloat> {
-        vec![self.x, self.y, self.z]
+    fn y(&self) -> GLfloat {
+        self.g as GLfloat
+    }
+
+    fn z(&self) -> GLfloat {
+        self.b as GLfloat
     }
 }
 
@@ -62,7 +74,7 @@ pub struct RenderableObject<'a> {
     object: obj::Object,
     material: Option<HashMap<String, mtl::Material>>,
     program: &'a shaders::Program,
-    initialized: bool,
+    loaded: bool,
     vao: GLuint,
     indices: i32,
 }
@@ -73,14 +85,14 @@ impl <'a> RenderableObject<'a> {
             object: object,
             material: material,
             program: program,
-            initialized: false,
+            loaded: false,
             vao: 0,
             indices: 0,
         }
     }
 
     pub fn render(&mut self, view: glm::Mat4, projection: glm::Mat4) {
-        self.lazy_init();
+        self.lazy_load_buffers();
 
         let model = glm::Mat4::one();
         let model_view_projection = projection * view * model;
@@ -240,9 +252,55 @@ impl <'a> RenderableObject<'a> {
             .collect()
     }
 
-    fn lazy_init(&mut self) {
-        if !self.initialized {
-            self.initialized = true;
+    fn create_array_buffer<T: SwizzleXyz>(&self, attribute_name: &str, triples: Vec<T>) {
+        let mut flattened_triples: Vec<GLfloat> = vec![];
+        for t in triples {
+            flattened_triples.push(t.x());
+            flattened_triples.push(t.y());
+            flattened_triples.push(t.z());
+        }
+
+        unsafe {
+            let mut array_buffer_name: GLuint = 0;
+            gl::GenBuffers(1, &mut array_buffer_name);
+            gl::BindBuffer(gl::ARRAY_BUFFER, array_buffer_name);
+            gl::BufferData(
+                gl::ARRAY_BUFFER,
+                (flattened_triples.len() * size_of::<GLfloat>()) as GLsizeiptr,
+                flattened_triples.as_ptr() as *const _,
+                gl::STATIC_DRAW);
+            assert_no_gl_error();
+
+            let attribute_location = self.program.get_attrib(attribute_name) as GLuint;
+            gl::EnableVertexAttribArray(attribute_location);
+            gl::VertexAttribPointer(
+                attribute_location,
+                3,
+                gl::FLOAT,
+                gl::FALSE as GLboolean,
+                0,
+                ptr::null());
+            assert_no_gl_error();
+        }
+    }
+
+    fn create_element_array_buffer(&self, indices: Vec<u32>) {
+        unsafe {
+            let mut index_buffer_name: GLuint = 0;
+            gl::GenBuffers(1, &mut index_buffer_name);
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer_name);
+            gl::BufferData(
+                gl::ELEMENT_ARRAY_BUFFER,
+                (indices.len() * size_of::<u32>()) as GLsizeiptr,
+                indices.as_ptr() as *const _,
+                gl::STATIC_DRAW);
+            assert_no_gl_error();
+        }
+    }
+
+    fn lazy_load_buffers(&mut self) {
+        if !self.loaded {
+            self.loaded = true;
 
             unsafe {
                 // create the VAO for this object
@@ -256,27 +314,20 @@ impl <'a> RenderableObject<'a> {
             {
                 let chunks = self.split_into_renderable_chunks();
 
-                let mut flattened_vertices: Vec<GLfloat> = vec![];
-                let mut flattened_normals: Vec<GLfloat> = vec![];
-                let mut flattened_color_ambient: Vec<GLfloat> = vec![];
-                let mut flattened_color_diffuse: Vec<GLfloat> = vec![];
+                let mut all_vertices: Vec<glm::Vec3> = vec![];
+                let mut all_normals: Vec<glm::Vec3> = vec![];
+                let mut all_color_ambient: Vec<mtl::Color> = vec![];
+                let mut all_color_diffuse: Vec<mtl::Color> = vec![];
                 let mut indices: Vec<u32> = vec![];
 
                 let mut offset = 0;
                 for c in chunks {
                     for i in 0..c.vertices.len() {
-                        let mut v = c.vertices[i].flatten();
-                        flattened_vertices.append(&mut v);
-
-                        let mut n = c.normals[i].flatten();
-                        flattened_normals.append(&mut n);
-
-                        let mut c_ambient = c.material.color_ambient.flatten();
-                        flattened_color_ambient.append(&mut c_ambient);
-
+                        all_vertices.push(c.vertices[i]);
+                        all_normals.push(c.normals[i]);
                         // TODO: Respect illumination type, which may not specify diffuse.
-                        let mut c_diffuse = c.material.color_diffuse.flatten();
-                        flattened_color_diffuse.append(&mut c_diffuse);
+                        all_color_ambient.push(c.material.color_ambient);
+                        all_color_diffuse.push(c.material.color_diffuse);
                     }
 
                     for t in c.triangles {
@@ -297,112 +348,13 @@ impl <'a> RenderableObject<'a> {
                     offset += c.vertices.len() as u32;
                 }
 
-                // assign vertex position data
-                unsafe {
-                    let mut v_position_buffer: GLuint = 0;
-                    gl::GenBuffers(1, &mut v_position_buffer);
-                    gl::BindBuffer(gl::ARRAY_BUFFER, v_position_buffer);
-                    gl::BufferData(
-                        gl::ARRAY_BUFFER,
-                        (flattened_vertices.len() * size_of::<GLfloat>()) as GLsizeiptr,
-                        flattened_vertices.as_ptr() as *const _,
-                        gl::STATIC_DRAW);
-                    assert_no_gl_error();
-
-                    let position_attrib_location = self.program.get_attrib("in_VertexPosition") as GLuint;
-                    gl::EnableVertexAttribArray(position_attrib_location);
-                    gl::VertexAttribPointer(
-                        position_attrib_location,
-                        3,
-                        gl::FLOAT,
-                        gl::FALSE as GLboolean,
-                        0,
-                        ptr::null());
-                    assert_no_gl_error();
-                }
-
-                // assign vertex normal data
-                unsafe {
-                    let mut v_normal_buffer: GLuint = 0;
-                    gl::GenBuffers(1, &mut v_normal_buffer);
-                    gl::BindBuffer(gl::ARRAY_BUFFER, v_normal_buffer);
-                    gl::BufferData(
-                        gl::ARRAY_BUFFER,
-                        (flattened_vertices.len() * size_of::<GLfloat>()) as GLsizeiptr,
-                        flattened_vertices.as_ptr() as *const _,
-                        gl::STATIC_DRAW);
-                    assert_no_gl_error();
-
-                    let position_attrib_location = self.program.get_attrib("in_VertexNormal") as GLuint;
-                    gl::EnableVertexAttribArray(position_attrib_location);
-                    gl::VertexAttribPointer(
-                        position_attrib_location,
-                        3,
-                        gl::FLOAT,
-                        gl::FALSE as GLboolean,
-                        0,
-                        ptr::null());
-                    assert_no_gl_error();
-                }
-
-                // assign vertex ambient color
-                unsafe {
-                    let mut v_color_ambient_buffer: GLuint = 0;
-                    gl::GenBuffers(1, &mut v_color_ambient_buffer);
-                    gl::BindBuffer(gl::ARRAY_BUFFER, v_color_ambient_buffer);
-                    gl::BufferData(
-                        gl::ARRAY_BUFFER,
-                        (flattened_color_ambient.len() * size_of::<GLfloat>()) as GLsizeiptr,
-                        flattened_color_ambient.as_ptr() as *const _,
-                        gl::STATIC_DRAW);
-
-                    let fragment_color_attrib = self.program.get_attrib("in_ColorAmbient") as GLuint;
-                    gl::EnableVertexAttribArray(fragment_color_attrib);
-                    gl::VertexAttribPointer(
-                        fragment_color_attrib,
-                        3,
-                        gl::FLOAT,
-                        gl::FALSE as GLboolean,
-                        0,
-                        ptr::null());
-                }
-
-                // assign vertex diffuse color
-                unsafe {
-                    let mut v_color_diffuse_buffer: GLuint = 0;
-                    gl::GenBuffers(1, &mut v_color_diffuse_buffer);
-                    gl::BindBuffer(gl::ARRAY_BUFFER, v_color_diffuse_buffer);
-                    gl::BufferData(
-                        gl::ARRAY_BUFFER,
-                        (flattened_color_diffuse.len() * size_of::<GLfloat>()) as GLsizeiptr,
-                        flattened_color_diffuse.as_ptr() as *const _,
-                        gl::STATIC_DRAW);
-
-                    let fragment_color_attrib = self.program.get_attrib("in_ColorDiffuse") as GLuint;
-                    gl::EnableVertexAttribArray(fragment_color_attrib);
-                    gl::VertexAttribPointer(
-                        fragment_color_attrib,
-                        3,
-                        gl::FLOAT,
-                        gl::FALSE as GLboolean,
-                        0,
-                        ptr::null());
-                }
-
-                // specify vertex index mapping
-                unsafe {
-                    let mut index_buffer: GLuint = 0;
-                    gl::GenBuffers(1, &mut index_buffer);
-                    gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer);
-                    gl::BufferData(
-                        gl::ELEMENT_ARRAY_BUFFER,
-                        (indices.len() * size_of::<u32>()) as GLsizeiptr,
-                        indices.as_ptr() as *const _,
-                        gl::STATIC_DRAW);
-                    assert_no_gl_error();
-                }
+                self.create_array_buffer("in_VertexPosition", all_vertices);
+                self.create_array_buffer("in_VertexNormal", all_normals);
+                self.create_array_buffer("in_ColorAmbient", all_color_ambient);
+                self.create_array_buffer("in_ColorDiffuse", all_color_diffuse);
 
                 triangle_count = indices.len() as i32;
+                self.create_element_array_buffer(indices);
             }
 
             self.indices = triangle_count;
