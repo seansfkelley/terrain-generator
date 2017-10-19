@@ -1,5 +1,5 @@
 next steps:
 
-- figure out why lighting in phong shading falls off so fast
-- debug shaders: render vertex/triangle normals in view
+- specular lighting
+- respect illumination type from .obj file
 - implement smoothing groups from .obj file
