@@ -43,6 +43,7 @@ lazy_static! {
     };
 }
 
+#[derive(Debug)]
 struct RenderableChunk<'a> {
     material: &'a mtl::Material,
     vertices: Vec<obj::Vertex>,
@@ -187,7 +188,7 @@ impl <'a> RenderableObject<'a> {
 
                 let mut flattened_vertices: Vec<GLfloat> = vec![];
                 let mut flattened_colors: Vec<GLfloat> = vec![];
-                let mut indices: Vec<i32> = vec![];
+                let mut indices: Vec<u32> = vec![];
 
                 let mut offset = 0;
                 for c in chunks {
@@ -205,15 +206,15 @@ impl <'a> RenderableObject<'a> {
                                 (v2, _, _),
                                 (v3, _, _),
                             ) => {
-                                indices.push(v1 as i32 + offset);
-                                indices.push(v2 as i32 + offset);
-                                indices.push(v3 as i32 + offset);
+                                indices.push(v1 as u32 + offset);
+                                indices.push(v2 as u32 + offset);
+                                indices.push(v3 as u32 + offset);
                             },
                             _ => { panic!("unexpected non-triangle in triangle list"); },
                         }
                     }
 
-                    offset += c.vertices.len() as i32;
+                    offset += c.vertices.len() as u32;
                 }
 
                 unsafe {
@@ -276,7 +277,7 @@ impl <'a> RenderableObject<'a> {
                     assert_no_gl_error();
                 }
 
-                triangle_count = offset;
+                triangle_count = indices.len() as i32;
             }
 
             self.indices = triangle_count;
