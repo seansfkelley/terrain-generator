@@ -12,6 +12,22 @@ use util::assert_no_gl_error;
 use shaders;
 use util;
 
+trait Flattenable {
+    fn flatten(&self) -> Vec<GLfloat>;
+}
+
+impl Flattenable for obj::Vertex {
+    fn flatten(&self) -> Vec<GLfloat> {
+        return vec![self.x as f32, self.y as f32, self.z as f32];
+    }
+}
+
+impl Flattenable for mtl::Color {
+    fn flatten(&self) -> Vec<GLfloat> {
+        return vec![self.r as f32, self.g as f32, self.b as f32];
+    }
+}
+
 lazy_static! {
     static ref DEFAULT_MATERIAL: mtl::Material = mtl::Material {
         name: "default material".to_owned(),
@@ -25,10 +41,6 @@ lazy_static! {
         illumination: mtl::Illumination::Ambient,
         uv_map: Option::None,
     };
-}
-
-fn flatten_color(color: mtl::Color) -> Vec<f32> {
-    return vec![color.r as f32, color.g as f32, color.b as f32];
 }
 
 struct RenderableChunk<'a> {
@@ -161,8 +173,6 @@ impl <'a> RenderableObject<'a> {
         if !self.initialized {
             self.initialized = true;
 
-            let chunks = self.split_into_renderable_chunks();
-
             unsafe {
                 // create the VAO for this object
                 gl::GenVertexArrays(1, &mut self.vao);
@@ -170,13 +180,41 @@ impl <'a> RenderableObject<'a> {
                 assert_no_gl_error();
             }
 
+            let triangle_count: i32;
+
             {
-                let flattened_vertices: Vec<GLfloat> = self
-                    .object
-                    .vertices
-                    .iter()
-                    .flat_map(|v| vec![ v.x as GLfloat, v.y as GLfloat, v.z as GLfloat ].into_iter())
-                    .collect();
+                let chunks = self.split_into_renderable_chunks();
+
+                let mut flattened_vertices: Vec<GLfloat> = vec![];
+                let mut flattened_colors: Vec<GLfloat> = vec![];
+                let mut indices: Vec<i32> = vec![];
+
+                let mut offset = 0;
+                for c in chunks {
+                    for v in &c.vertices {
+                        let mut flattened_vertex = v.flatten();
+                        flattened_vertices.append(&mut flattened_vertex);
+                        let mut flattened_color = c.material.color_ambient.flatten();
+                        flattened_colors.append(&mut flattened_color);
+                    }
+
+                    for t in c.triangles {
+                        match t {
+                            obj::Primitive::Triangle(
+                                (v1, _, _),
+                                (v2, _, _),
+                                (v3, _, _),
+                            ) => {
+                                indices.push(v1 as i32 + offset);
+                                indices.push(v2 as i32 + offset);
+                                indices.push(v3 as i32 + offset);
+                            },
+                            _ => { panic!("unexpected non-triangle in triangle list"); },
+                        }
+                    }
+
+                    offset += c.vertices.len() as i32;
+                }
 
                 unsafe {
                     // set current array data buffer and fill it with vertex position data
@@ -202,99 +240,28 @@ impl <'a> RenderableObject<'a> {
                         ptr::null());
                     assert_no_gl_error();
                 }
-            }
 
-            // match self.material {
-            //     Some(ref material) => {
-            //         let mut ordered_vertex_colors: Vec<(usize, mtl::Color)> = self
-            //             .object
-            //             .geometry
-            //             .iter()
-            //             .flat_map(|g| {
-            //                 g
-            //                     .shapes
-            //                     .iter()
-            //                     .flat_map(move |s| {
-            //                         let g1 = g.clone();
-            //                         match s.primitive {
-            //                             obj::Primitive::Triangle(
-            //                                 (v1, _, _),
-            //                                 (v2, _, _),
-            //                                 (v3, _, _),
-            //                             ) => {
-            //                                 // we'll want to duplicate vertices that appear in two different materials, eventually
-            //                                 let color = match g1.material_name {
-            //                                     Some(name) => material.get(&name).unwrap().color_ambient,
-            //                                     None => DEFAULT_COLOR,
-            //                                 };
-            //                                 vec![(v1, color), (v2, color), (v3, color)].into_iter()
-            //                             },
-            //                             _ => { panic!("got non-triangle primitive"); },
-            //                         }
-            //                     })
-            //             })
-            //             .collect::<Vec<(usize, mtl::Color)>>();
+                unsafe {
+                    // set current array data buffer and fill it with vertex "color" data
+                    let mut v_color_ambient_buffer: GLuint = 0;
+                    gl::GenBuffers(1, &mut v_color_ambient_buffer);
+                    gl::BindBuffer(gl::ARRAY_BUFFER, v_color_ambient_buffer);
+                    gl::BufferData(
+                        gl::ARRAY_BUFFER,
+                        (flattened_colors.len() * size_of::<GLfloat>()) as GLsizeiptr,
+                        flattened_colors.as_ptr() as *const _,
+                        gl::STATIC_DRAW);
 
-            //         ordered_vertex_colors.sort_by(|t0, t1| t0.0.cmp(&t1.0));
-
-            //         let flattened_vertex_colors: Vec<GLfloat> = ordered_vertex_colors
-            //             .iter()
-            //             .flat_map(|t| flatten_color(t.1).into_iter())
-            //             .collect();
-
-            //         unsafe {
-            //             // set current array data buffer and fill it with vertex "color" data
-            //             let mut v_color_buffer: GLuint = 0;
-            //             gl::GenBuffers(1, &mut v_color_buffer);
-            //             gl::BindBuffer(gl::ARRAY_BUFFER, v_color_buffer);
-            //             gl::BufferData(
-            //                 gl::ARRAY_BUFFER,
-            //                 (flattened_vertex_colors.len() * size_of::<GLfloat>()) as GLsizeiptr,
-            //                 flattened_vertex_colors.as_ptr() as *const _,
-            //                 gl::STATIC_DRAW);
-
-            //             let fragment_color_attrib = self.program.get_attrib("in_FragmentColor") as GLuint;
-            //             gl::EnableVertexAttribArray(fragment_color_attrib);
-            //             gl::VertexAttribPointer(
-            //                 fragment_color_attrib,
-            //                 3,
-            //                 gl::FLOAT,
-            //                 gl::FALSE as GLboolean,
-            //                 0,
-            //                 ptr::null());
-            //         }
-            //     },
-            //     None => {
-            //         // TODO: Some sane default scheme?
-            //         info!("no material provided, will render default");
-            //     }
-            // }
-
-            {
-                let vertex_indices: Vec<u32> = self
-                    .object
-                    .geometry
-                    .iter()
-                    .flat_map(|g| {
-                        g
-                            .shapes
-                            .iter()
-                            .flat_map(|s| {
-                                match s.primitive {
-                                    obj::Primitive::Triangle(
-                                        (v1, _, _),
-                                        (v2, _, _),
-                                        (v3, _, _),
-                                    ) => {
-                                        vec![v1 as u32, v2 as u32, v3 as u32].into_iter()
-                                    },
-                                    _ => { panic!("got non-triangle primitive"); },
-                                }
-                            })
-                    })
-                    .collect();
-
-                self.indices = vertex_indices.len() as i32;
+                    let fragment_color_attrib = self.program.get_attrib("in_FragmentColor") as GLuint;
+                    gl::EnableVertexAttribArray(fragment_color_attrib);
+                    gl::VertexAttribPointer(
+                        fragment_color_attrib,
+                        3,
+                        gl::FLOAT,
+                        gl::FALSE as GLboolean,
+                        0,
+                        ptr::null());
+                }
 
                 unsafe {
                     // lastly, tell OpenGL about the indices (that must be correlated for all buffers!)
@@ -303,12 +270,16 @@ impl <'a> RenderableObject<'a> {
                     gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer);
                     gl::BufferData(
                         gl::ELEMENT_ARRAY_BUFFER,
-                        (vertex_indices.len() * size_of::<u32>()) as GLsizeiptr,
-                        vertex_indices.as_ptr() as *const _,
+                        (indices.len() * size_of::<u32>()) as GLsizeiptr,
+                        indices.as_ptr() as *const _,
                         gl::STATIC_DRAW);
                     assert_no_gl_error();
                 }
+
+                triangle_count = offset;
             }
+
+            self.indices = triangle_count;
         }
     }
 }
