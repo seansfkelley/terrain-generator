@@ -18,13 +18,19 @@ trait Flattenable {
 
 impl Flattenable for obj::Vertex {
     fn flatten(&self) -> Vec<GLfloat> {
-        return vec![self.x as f32, self.y as f32, self.z as f32];
+        vec![self.x as f32, self.y as f32, self.z as f32]
     }
 }
 
 impl Flattenable for mtl::Color {
     fn flatten(&self) -> Vec<GLfloat> {
-        return vec![self.r as f32, self.g as f32, self.b as f32];
+        vec![self.r as f32, self.g as f32, self.b as f32]
+    }
+}
+
+impl Flattenable for glm::Vec3 {
+    fn flatten(&self) -> Vec<GLfloat> {
+        vec![self.x, self.y, self.z]
     }
 }
 
@@ -46,7 +52,8 @@ lazy_static! {
 #[derive(Debug)]
 struct RenderableChunk<'a> {
     material: &'a mtl::Material,
-    vertices: Vec<obj::Vertex>,
+    vertices: Vec<glm::Vec3>,
+    normals: Vec<glm::Vec3>,
     triangles: Vec<obj::Primitive>,
 }
 
@@ -87,6 +94,42 @@ impl <'a> RenderableObject<'a> {
     }
 
     fn split_into_renderable_chunks(&self) -> Vec<RenderableChunk> {
+        let converted_vertices: Vec<glm::Vec3> = self
+            .object
+            .vertices
+            .iter()
+            .map(|v| glm::vec3(v.x as f32, v.y as f32, v.z as f32))
+            .collect();
+
+        let triangle_normals: Vec<glm::Vec3> = self
+            .object
+            .geometry
+            .iter()
+            .flat_map(|g| {
+                g
+                    .shapes
+                    .iter()
+                    .flat_map(|s| {
+                        match s.primitive {
+                            obj::Primitive::Triangle(
+                                (v1, _, _),
+                                (v2, _, _),
+                                (v3, _, _),
+                            ) => {
+                                let normal = glm::cross(converted_vertices[v2] - converted_vertices[v1], converted_vertices[v3] - converted_vertices[v1]);
+                                vec![(v1, normal), (v2, normal), (v3, normal)]
+                            },
+                            _ => { panic!("got non-triangle primitive"); },
+                        }
+                    })
+            })
+            // pseudocode
+            // .group_by(|t| t.0)
+            // .map_values(|ns| sum(ns).normalize())
+            // .sort_by(|t| t.0)
+            // .map(|t| t.1)
+            .collect();
+
         self
             .object
             .geometry
@@ -124,14 +167,14 @@ impl <'a> RenderableObject<'a> {
                     })
                     .collect();
 
-                let mut remapped_vertex_tuples: Vec<(usize, obj::Vertex)> = remapped_vertex_indices
+                let mut remapped_vertex_tuples: Vec<(usize, glm::Vec3)> = remapped_vertex_indices
                     .keys()
-                    .map(|i| (remapped_vertex_indices[i], self.object.vertices[*i]))
+                    .map(|i| (remapped_vertex_indices[i], converted_vertices[*i]))
                     .collect();
 
                 remapped_vertex_tuples.sort_by(|v1, v2| v1.0.cmp(&v2.0));
 
-                let vertices: Vec<obj::Vertex> = remapped_vertex_tuples
+                let vertices: Vec<glm::Vec3> = remapped_vertex_tuples
                     .iter()
                     .map(|t| t.1)
                     .collect();
@@ -161,9 +204,17 @@ impl <'a> RenderableObject<'a> {
                     })
                     .collect();
 
+                // TODO: Normals.
+                // First pass: infer from triangles.
+                // Second pass: fetch from file too.
+                // Check the .obj spec, I know there is an implicit definition of a vertex normal when not provided.
+                // Note that normal should be inferred _before_ splitting.
+
+
                 RenderableChunk {
                     material: material,
                     vertices: vertices,
+                    normals: vec![],
                     triangles: triangles,
                 }
             })
