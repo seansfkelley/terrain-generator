@@ -11,6 +11,7 @@ extern crate num_traits;
 extern crate wavefront_obj;
 #[macro_use]
 extern crate lazy_static;
+extern crate multimap;
 
 mod shaders;
 mod controls;
@@ -110,6 +111,16 @@ fn mapify_mtl(mtl_set: mtl::MtlSet) -> collections::HashMap<String, mtl::Materia
     map
 }
 
+fn load_local_object<'a>(name: &str, program: &'a shaders::Program) -> objects::RenderableObject<'a> {
+    let p = path::Path::new("./objects");
+    let o = obj::parse(file::read_file_contents(&*p.join(name))).unwrap();
+    let m = match o.material_library {
+        Some(mtl_name) => Some(mapify_mtl(mtl::parse(file::read_file_contents(&*p.join(mtl_name))).unwrap())),
+        None => None,
+    };
+    objects::RenderableObject::new(o.objects[1].clone(), m, program)
+}
+
 fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f64, glfw::WindowEvent)>) {
     glfw.poll_events();
     controls::init_window_controls(window);
@@ -121,25 +132,20 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         assert_no_gl_error();
     }
 
-    let vs = shaders::compile_shader("./shaders/basic_w_color.vert", gl::VERTEX_SHADER);
-    let fs = shaders::compile_shader("./shaders/given_color.frag", gl::FRAGMENT_SHADER);
-    let program = shaders::Program::new(vs, fs, vec!["mvp"], vec!["in_Position", "in_FragmentColor"]);
+    let vs_basic = shaders::compile_shader("./shaders/basic_w_color.vert", gl::VERTEX_SHADER);
+    let fs_basic = shaders::compile_shader("./shaders/given_color.frag", gl::FRAGMENT_SHADER);
+    let program_basic = shaders::Program::new(vs_basic, fs_basic, vec!["mvp"], vec!["in_Position", "in_FragmentColor"]);
+
+    let vs_phong = shaders::compile_shader("./shaders/phong.vert", gl::VERTEX_SHADER);
+    let fs_phong = shaders::compile_shader("./shaders/phong.frag", gl::FRAGMENT_SHADER);
+    let program_phong = shaders::Program::new(vs_phong, fs_phong, vec!["mvp"], vec!["in_Position", "in_ColorAmbient", "in_ColorDiffuse"]);
+
     info!("successfully created shaders/program");
 
-    let load_local_object = |name| -> objects::RenderableObject {
-        let p = path::Path::new("./objects");
-        let o = obj::parse(file::read_file_contents(&*p.join(name))).unwrap();
-        let m = match o.material_library {
-            Some(mtl_name) => Some(mapify_mtl(mtl::parse(file::read_file_contents(&*p.join(mtl_name))).unwrap())),
-            None => None,
-        };
-        objects::RenderableObject::new(o.objects[1].clone(), m, &program)
-    };
-
     let mut renderables = vec![
-        load_local_object("icosahedron.obj"),
-        load_local_object("dodecahedron.obj"),
-        load_local_object("shuttle.obj")
+        load_local_object("icosahedron.obj", &program_basic),
+        load_local_object("dodecahedron.obj", &program_basic),
+        load_local_object("shuttle.obj", &program_phong)
     ];
     info!("successfully initialized static data");
 

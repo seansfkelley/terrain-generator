@@ -11,6 +11,7 @@ env_logger = "0.4.3"
 num-traits = "0.1.40"
 wavefront_obj = "5.1.0"
 lazy_static = "0.2.9"
+multimap = "0.4.0"
 
 [dependencies.glfw]
 git = "https://github.com/bjz/glfw-rs.git"

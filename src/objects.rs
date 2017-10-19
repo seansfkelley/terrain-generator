@@ -2,6 +2,7 @@ use std::vec::Vec;
 use std::mem::size_of;
 use std::ptr;
 use std::collections::{ HashMap, HashSet };
+use multimap;
 use gl;
 use gl::types::*;
 use glm;
@@ -101,7 +102,7 @@ impl <'a> RenderableObject<'a> {
             .map(|v| glm::vec3(v.x as f32, v.y as f32, v.z as f32))
             .collect();
 
-        let triangle_normals: Vec<glm::Vec3> = self
+        let mut vertex_normal_pairs: Vec<(usize, glm::Vec3)> = self
             .object
             .geometry
             .iter()
@@ -116,7 +117,7 @@ impl <'a> RenderableObject<'a> {
                                 (v2, _, _),
                                 (v3, _, _),
                             ) => {
-                                let normal = glm::cross(converted_vertices[v2] - converted_vertices[v1], converted_vertices[v3] - converted_vertices[v1]);
+                                let normal = glm::normalize(glm::cross(converted_vertices[v2] - converted_vertices[v1], converted_vertices[v3] - converted_vertices[v1]));
                                 vec![(v1, normal), (v2, normal), (v3, normal)]
                             },
                             _ => { panic!("got non-triangle primitive"); },
@@ -124,10 +125,19 @@ impl <'a> RenderableObject<'a> {
                     })
             })
             // pseudocode
-            // .group_by(|t| t.0)
-            // .map_values(|ns| sum(ns).normalize())
-            // .sort_by(|t| t.0)
-            // .map(|t| t.1)
+            .collect::<multimap::MultiMap<usize, glm::Vec3>>()
+            .iter_all()
+            .map(|(v_index, normals)| {
+                (*v_index, normals.iter().fold(glm::vec3(0.0, 0.0, 0.0), |acc, &n| acc + n))
+            })
+            .collect();
+
+        vertex_normal_pairs.sort_by(|p1, p2| p1.0.cmp(&p2.0));
+
+        // TODO: Sometimes, normals will be givn to us in the input file.
+        let all_vertex_normals: Vec<glm::Vec3> = vertex_normal_pairs
+            .iter()
+            .map(|p| p.1)
             .collect();
 
         self
@@ -144,7 +154,7 @@ impl <'a> RenderableObject<'a> {
                 }
 
                 let mut new_index_counter: usize = 0;
-                let remapped_vertex_indices: HashMap<usize, usize> = g.shapes
+                let old_to_new_index_mapping: HashMap<usize, usize> = g.shapes
                     .iter()
                     .flat_map(|s| {
                         match s.primitive {
@@ -167,16 +177,25 @@ impl <'a> RenderableObject<'a> {
                     })
                     .collect();
 
-                let mut remapped_vertex_tuples: Vec<(usize, glm::Vec3)> = remapped_vertex_indices
+                let mut sorted_reverse_mapping: Vec<(usize, usize)> = old_to_new_index_mapping
                     .keys()
-                    .map(|i| (remapped_vertex_indices[i], converted_vertices[*i]))
+                    .map(|i| (old_to_new_index_mapping[i], *i))
                     .collect();
 
-                remapped_vertex_tuples.sort_by(|v1, v2| v1.0.cmp(&v2.0));
-
-                let vertices: Vec<glm::Vec3> = remapped_vertex_tuples
+                sorted_reverse_mapping.sort_by(|p1, p2| p1.0.cmp(&p2.0));
+                let new_to_old_index_mapping: Vec<usize> = sorted_reverse_mapping
                     .iter()
-                    .map(|t| t.1)
+                    .map(|p| p.1)
+                    .collect();
+
+                let vertices: Vec<glm::Vec3> = new_to_old_index_mapping
+                    .iter()
+                    .map(|i| converted_vertices[*i])
+                    .collect();
+
+                let normals: Vec<glm::Vec3> = new_to_old_index_mapping
+                    .iter()
+                    .map(|i| all_vertex_normals[*i])
                     .collect();
 
                 let triangles: Vec<obj::Primitive> = g.shapes
@@ -189,9 +208,9 @@ impl <'a> RenderableObject<'a> {
                                 (v3, t3, n3),
                             ) => {
                                 let (new_v1, new_v2, new_v3) = (
-                                    remapped_vertex_indices[&v1],
-                                    remapped_vertex_indices[&v2],
-                                    remapped_vertex_indices[&v3],
+                                    old_to_new_index_mapping[&v1],
+                                    old_to_new_index_mapping[&v2],
+                                    old_to_new_index_mapping[&v3],
                                 );
                                 obj::Primitive::Triangle {
                                     0: (new_v1, t1, n1),
@@ -204,17 +223,10 @@ impl <'a> RenderableObject<'a> {
                     })
                     .collect();
 
-                // TODO: Normals.
-                // First pass: infer from triangles.
-                // Second pass: fetch from file too.
-                // Check the .obj spec, I know there is an implicit definition of a vertex normal when not provided.
-                // Note that normal should be inferred _before_ splitting.
-
-
                 RenderableChunk {
                     material: material,
                     vertices: vertices,
-                    normals: vec![],
+                    normals: normals,
                     triangles: triangles,
                 }
             })
@@ -238,16 +250,26 @@ impl <'a> RenderableObject<'a> {
                 let chunks = self.split_into_renderable_chunks();
 
                 let mut flattened_vertices: Vec<GLfloat> = vec![];
-                let mut flattened_colors: Vec<GLfloat> = vec![];
+                let mut flattened_normals: Vec<GLfloat> = vec![];
+                let mut flattened_color_ambient: Vec<GLfloat> = vec![];
+                let mut flattened_color_diffuse: Vec<GLfloat> = vec![];
                 let mut indices: Vec<u32> = vec![];
 
                 let mut offset = 0;
                 for c in chunks {
-                    for v in &c.vertices {
-                        let mut flattened_vertex = v.flatten();
-                        flattened_vertices.append(&mut flattened_vertex);
-                        let mut flattened_color = c.material.color_ambient.flatten();
-                        flattened_colors.append(&mut flattened_color);
+                    for i in 0..c.vertices.len() {
+                        let mut v = c.vertices[i].flatten();
+                        flattened_vertices.append(&mut v);
+
+                        let mut n = c.normals[i].flatten();
+                        flattened_normals.append(&mut n);
+
+                        let mut c_ambient = c.material.color_ambient.flatten();
+                        flattened_color_ambient.append(&mut c_ambient);
+
+                        // TODO: Respect illumination type, which may not specify diffuse.
+                        let mut c_diffuse = c.material.color_diffuse.flatten();
+                        flattened_color_diffuse.append(&mut c_diffuse);
                     }
 
                     for t in c.triangles {
@@ -268,8 +290,8 @@ impl <'a> RenderableObject<'a> {
                     offset += c.vertices.len() as u32;
                 }
 
+                // assign vertex position data
                 unsafe {
-                    // set current array data buffer and fill it with vertex position data
                     let mut v_position_buffer: GLuint = 0;
                     gl::GenBuffers(1, &mut v_position_buffer);
                     gl::BindBuffer(gl::ARRAY_BUFFER, v_position_buffer);
@@ -280,7 +302,6 @@ impl <'a> RenderableObject<'a> {
                         gl::STATIC_DRAW);
                     assert_no_gl_error();
 
-                    // find the location of the position argument in the shader and tell OpenGL that the currently bound array points to it in triples
                     let position_attrib_location = self.program.get_attrib("in_Position") as GLuint;
                     gl::EnableVertexAttribArray(position_attrib_location);
                     gl::VertexAttribPointer(
@@ -293,18 +314,18 @@ impl <'a> RenderableObject<'a> {
                     assert_no_gl_error();
                 }
 
+                // assign vertex ambient color
                 unsafe {
-                    // set current array data buffer and fill it with vertex "color" data
                     let mut v_color_ambient_buffer: GLuint = 0;
                     gl::GenBuffers(1, &mut v_color_ambient_buffer);
                     gl::BindBuffer(gl::ARRAY_BUFFER, v_color_ambient_buffer);
                     gl::BufferData(
                         gl::ARRAY_BUFFER,
-                        (flattened_colors.len() * size_of::<GLfloat>()) as GLsizeiptr,
-                        flattened_colors.as_ptr() as *const _,
+                        (flattened_color_ambient.len() * size_of::<GLfloat>()) as GLsizeiptr,
+                        flattened_color_ambient.as_ptr() as *const _,
                         gl::STATIC_DRAW);
 
-                    let fragment_color_attrib = self.program.get_attrib("in_FragmentColor") as GLuint;
+                    let fragment_color_attrib = self.program.get_attrib("in_ColorAmbient") as GLuint;
                     gl::EnableVertexAttribArray(fragment_color_attrib);
                     gl::VertexAttribPointer(
                         fragment_color_attrib,
@@ -315,8 +336,30 @@ impl <'a> RenderableObject<'a> {
                         ptr::null());
                 }
 
+                // assign vertex ambient color
                 unsafe {
-                    // lastly, tell OpenGL about the indices (that must be correlated for all buffers!)
+                    let mut v_color_diffuse_buffer: GLuint = 0;
+                    gl::GenBuffers(1, &mut v_color_diffuse_buffer);
+                    gl::BindBuffer(gl::ARRAY_BUFFER, v_color_diffuse_buffer);
+                    gl::BufferData(
+                        gl::ARRAY_BUFFER,
+                        (flattened_color_diffuse.len() * size_of::<GLfloat>()) as GLsizeiptr,
+                        flattened_color_diffuse.as_ptr() as *const _,
+                        gl::STATIC_DRAW);
+
+                    let fragment_color_attrib = self.program.get_attrib("in_ColorDiffuse") as GLuint;
+                    gl::EnableVertexAttribArray(fragment_color_attrib);
+                    gl::VertexAttribPointer(
+                        fragment_color_attrib,
+                        3,
+                        gl::FLOAT,
+                        gl::FALSE as GLboolean,
+                        0,
+                        ptr::null());
+                }
+
+                // specify vertex index mapping
+                unsafe {
                     let mut index_buffer: GLuint = 0;
                     gl::GenBuffers(1, &mut index_buffer);
                     gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer);
