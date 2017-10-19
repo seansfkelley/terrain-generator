@@ -39,7 +39,7 @@ lazy_static! {
     static ref DEFAULT_MATERIAL: mtl::Material = mtl::Material {
         name: "default material".to_owned(),
         specular_coefficient: 0.0,
-        color_ambient: mtl::Color { r: 1.0, g: 1.0, b: 1.0 },
+        color_ambient: mtl::Color { r: 0.5, g: 0.5, b: 0.5 },
         color_diffuse: mtl::Color { r: 1.0, g: 1.0, b: 1.0 },
         color_specular: mtl::Color { r: 1.0, g: 1.0, b: 1.0 },
         color_emissive: Option::None,
@@ -83,12 +83,19 @@ impl <'a> RenderableObject<'a> {
         self.lazy_init();
 
         let model = glm::Mat4::one();
-        let mvp = projection * view * model;
-        let mvp_array = util::arrayify_mat4(mvp);
+        let model_view_projection = projection * view * model;
+
+        let v_array = util::arrayify_mat4(view);
+        let m_array = util::arrayify_mat4(model);
+        let mvp_array = util::arrayify_mat4(model_view_projection);
+        let light_position = [2f32, 3f32, -7f32];
 
         unsafe {
             gl::UseProgram(self.program.name);
-            gl::UniformMatrix4fv(self.program.get_uniform("mvp"), 1, gl::FALSE, &*mvp_array as *const f32);
+            gl::UniformMatrix4fv(self.program.get_uniform("u_MatMvp"), 1, gl::FALSE, &*mvp_array as *const f32);
+            gl::UniformMatrix4fv(self.program.get_uniform("u_MatV"), 1, gl::FALSE, &*v_array as *const f32);
+            gl::UniformMatrix4fv(self.program.get_uniform("u_MatM"), 1, gl::FALSE, &*m_array as *const f32);
+            gl::Uniform3f(self.program.get_uniform("u_LightPosition_WorldSpace"), light_position[0], light_position[1], light_position[2]);
             gl::BindVertexArray(self.vao);
             gl::DrawElements(gl::TRIANGLES, self.indices, gl::UNSIGNED_INT, ptr::null());
         }
@@ -302,7 +309,31 @@ impl <'a> RenderableObject<'a> {
                         gl::STATIC_DRAW);
                     assert_no_gl_error();
 
-                    let position_attrib_location = self.program.get_attrib("in_Position") as GLuint;
+                    let position_attrib_location = self.program.get_attrib("in_VertexPosition") as GLuint;
+                    gl::EnableVertexAttribArray(position_attrib_location);
+                    gl::VertexAttribPointer(
+                        position_attrib_location,
+                        3,
+                        gl::FLOAT,
+                        gl::FALSE as GLboolean,
+                        0,
+                        ptr::null());
+                    assert_no_gl_error();
+                }
+
+                // assign vertex normal data
+                unsafe {
+                    let mut v_normal_buffer: GLuint = 0;
+                    gl::GenBuffers(1, &mut v_normal_buffer);
+                    gl::BindBuffer(gl::ARRAY_BUFFER, v_normal_buffer);
+                    gl::BufferData(
+                        gl::ARRAY_BUFFER,
+                        (flattened_vertices.len() * size_of::<GLfloat>()) as GLsizeiptr,
+                        flattened_vertices.as_ptr() as *const _,
+                        gl::STATIC_DRAW);
+                    assert_no_gl_error();
+
+                    let position_attrib_location = self.program.get_attrib("in_VertexNormal") as GLuint;
                     gl::EnableVertexAttribArray(position_attrib_location);
                     gl::VertexAttribPointer(
                         position_attrib_location,
@@ -336,7 +367,7 @@ impl <'a> RenderableObject<'a> {
                         ptr::null());
                 }
 
-                // assign vertex ambient color
+                // assign vertex diffuse color
                 unsafe {
                     let mut v_color_diffuse_buffer: GLuint = 0;
                     gl::GenBuffers(1, &mut v_color_diffuse_buffer);
