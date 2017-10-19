@@ -1,7 +1,7 @@
 use std::vec::Vec;
 use std::mem::size_of;
 use std::ptr;
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
 use gl;
 use gl::types::*;
 use glm;
@@ -34,7 +34,7 @@ fn flatten_color(color: mtl::Color) -> Vec<f32> {
 struct RenderableChunk<'a> {
     material: &'a mtl::Material,
     vertices: Vec<obj::Vertex>,
-    triangles: Vec<obj::Shape>,
+    triangles: Vec<obj::Primitive>,
 }
 
 pub struct RenderableObject<'a> {
@@ -73,50 +73,95 @@ impl <'a> RenderableObject<'a> {
         }
     }
 
+    fn split_into_renderable_chunks(&self) -> Vec<RenderableChunk> {
+        self
+            .object
+            .geometry
+            .iter()
+            .map(|g| {
+                let material;
+                // Nested options are pretty sad. :/
+                if self.material.is_some() && g.material_name.is_some() {
+                    material = self.material.as_ref().unwrap().get(g.material_name.as_ref().unwrap()).unwrap_or(&DEFAULT_MATERIAL);
+                } else {
+                    material = &DEFAULT_MATERIAL;
+                }
+
+                let mut new_index_counter: usize = 0;
+                let remapped_vertex_indices: HashMap<usize, usize> = g.shapes
+                    .iter()
+                    .flat_map(|s| {
+                        match s.primitive {
+                            obj::Primitive::Triangle(
+                                (v1, _, _),
+                                (v2, _, _),
+                                (v3, _, _),
+                            ) => {
+                                vec![v1, v2, v3].into_iter()
+                            },
+                            _ => { panic!("got non-triangle primitive"); },
+                        }
+                    })
+                    .collect::<HashSet<usize>>()
+                    .iter()
+                    .map(|i| {
+                        let indices = (*i, new_index_counter);
+                        new_index_counter += 1;
+                        indices
+                    })
+                    .collect();
+
+                let mut remapped_vertex_tuples: Vec<(usize, obj::Vertex)> = remapped_vertex_indices
+                    .keys()
+                    .map(|i| (remapped_vertex_indices[i], self.object.vertices[*i]))
+                    .collect();
+
+                remapped_vertex_tuples.sort_by(|v1, v2| v1.0.cmp(&v2.0));
+
+                let vertices: Vec<obj::Vertex> = remapped_vertex_tuples
+                    .iter()
+                    .map(|t| t.1)
+                    .collect();
+
+                let triangles: Vec<obj::Primitive> = g.shapes
+                    .iter()
+                    .map(|s| {
+                        match s.primitive {
+                            obj::Primitive::Triangle(
+                                (v1, t1, n1),
+                                (v2, t2, n2),
+                                (v3, t3, n3),
+                            ) => {
+                                let (new_v1, new_v2, new_v3) = (
+                                    remapped_vertex_indices[&v1],
+                                    remapped_vertex_indices[&v2],
+                                    remapped_vertex_indices[&v3],
+                                );
+                                obj::Primitive::Triangle {
+                                    0: (new_v1, t1, n1),
+                                    1: (new_v2, t2, n2),
+                                    2: (new_v3, t3, n3),
+                                }
+                            },
+                            _ => { panic!("got non-triangle primitive"); },
+                        }
+                    })
+                    .collect();
+
+                RenderableChunk {
+                    material: material,
+                    vertices: vertices,
+                    triangles: triangles,
+                }
+            })
+            .collect()
+    }
+
     fn lazy_init(&mut self) {
         if !self.initialized {
             self.initialized = true;
 
-            let mut renderable_chunks: Vec<RenderableChunk> = self
-                .object
-                .geometry
-                .iter()
-                .map(|g| {
-                    let material;
-                    // Nested options are pretty sad. :/
-                    if self.material.is_some() && g.material_name.is_some() {
-                        material = self.material.as_ref().unwrap().get(g.material_name.as_ref().unwrap()).unwrap_or(&DEFAULT_MATERIAL);
-                    } else {
-                        material = &DEFAULT_MATERIAL;
-                    }
-                    RenderableChunk {
-                        material: material,
-                        vertices: vec![],
-                        triangles: vec![],
-                    }
-                    // g
-                    //     .shapes
-                    //     .iter()
-                    //     .flat_map(move |s| {
-                    //         let g1 = g.clone();
-                    //         match s.primitive {
-                    //             obj::Primitive::Triangle(
-                    //                 (v1, _, _),
-                    //                 (v2, _, _),
-                    //                 (v3, _, _),
-                    //             ) => {
-                    //                 // we'll want to duplicate vertices that appear in two different materials, eventually
-                    //                 let color = match g1.material_name {
-                    //                     Some(name) => material.get(&name).unwrap().color_ambient,
-                    //                     None => DEFAULT_COLOR,
-                    //                 };
-                    //                 vec![(v1, color), (v2, color), (v3, color)].into_iter()
-                    //             },
-                    //             _ => { panic!("got non-triangle primitive"); },
-                    //         }
-                    //     })
-                })
-                .collect();
+            let chunks = self.split_into_renderable_chunks();
 
             unsafe {
                 // create the VAO for this object
