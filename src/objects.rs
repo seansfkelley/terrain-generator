@@ -115,6 +115,7 @@ impl <'a> RenderableObject<'a> {
             gl::Uniform1f(self.program.get_uniform("u_LightPower"), light_power);
             gl::BindVertexArray(self.vao);
             gl::DrawElements(gl::TRIANGLES, self.triangle_count, gl::UNSIGNED_INT, ptr::null());
+            assert_no_gl_error();
         }
     }
 
