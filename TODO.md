@@ -1,5 +1,14 @@
 next steps:
 
+- clone texture coordinates to match cloned vertex coordinates
+  - perhaps creating an intermediate Vertex object that includes all the remapped indices would be easier?
+- figure out why texture on cube is distorted
+- RenderableObject should do all the loading/parsing on its own (i.e. give it the path)
+  - this seems like a simpler API and doesn't require us to uselessly hold onto objects in memory once they're pushed to the GPU
+- figure out how to escape the texture ID from the chunking so it can be used during rendering
+- figure out what the meaning of glActiveTexture/TEXTURE0 actually is and how to use it
+- RenderableChunk should maybe be 1:1 with VAO so that it's easier to swap textures?
+- unbind VAOs when doing rendering/binding
 - respect normals specified in .obj file
 - implement normal mapping
 - implement debug mode (render normals, etc.)

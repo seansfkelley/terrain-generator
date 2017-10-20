@@ -127,12 +127,10 @@ impl <'a> RenderableObject<'a> {
             gl::Uniform3f(self.program.get_uniform("u_LightPosition_WorldSpace"), light_position[0], light_position[1], light_position[2]);
             gl::Uniform3f(self.program.get_uniform("u_LightColor"), light_color[0], light_color[1], light_color[2]);
             gl::Uniform1f(self.program.get_uniform("u_LightPower"), light_power);
-            assert_no_gl_error();
             // TODO: Actually have to get this out of the binding. Something to do with TEXTURE0?
+            // Note that this blows up if you give it TEXTURE0, so, you know, wat.
 		    gl::Uniform1i(self.program.get_uniform("u_TextureDiffuse"), 0);
-            assert_no_gl_error();
             gl::BindVertexArray(self.vao);
-            assert_no_gl_error();
             gl::DrawElements(gl::TRIANGLES, self.triangle_count, gl::UNSIGNED_INT, ptr::null());
             assert_no_gl_error();
         }
@@ -271,8 +269,6 @@ impl <'a> RenderableObject<'a> {
                     },
                 }
 
-                println!("{:?}", uvs);
-
                 let triangles: Vec<obj::Primitive> = g.shapes
                     .iter()
                     .map(|s| {
@@ -345,22 +341,23 @@ impl <'a> RenderableObject<'a> {
         unsafe {
             let mut texture_buffer_name: GLuint = 0;
             gl::GenTextures(1, &mut texture_buffer_name);
+            // TODO: What does this actually mean and where do I have to refer to it?
             gl::ActiveTexture(gl::TEXTURE0);
             gl::BindTexture(gl::TEXTURE_2D, texture_buffer_name);
             gl::TexImage2D(
                 gl::TEXTURE_2D,
-                0, // TODO: mipmap level
-                gl::RGB as GLint, // Typings seem wrong here...
+                0,
+                gl::RGB as GLint,
                 width as GLsizei,
                 height as GLsizei,
                 0,
                 gl::RGB,
                 gl::UNSIGNED_BYTE,
-                // Literally no idea if this is right.
+                // TODO: Literally no idea if this is right.
                 (*(texture.to_rgb())).as_ptr() as *const _,
             );
 
-            // TODO: wat
+            // TODO: Better resampling.
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
 
