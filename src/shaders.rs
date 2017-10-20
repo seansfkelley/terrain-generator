@@ -2,7 +2,6 @@ extern crate gl;
 
 use std::{ ptr, str, path };
 use std::vec::Vec;
-use std::collections::HashMap;
 use std::ffi::CString;
 use gl::types::*;
 
@@ -62,12 +61,10 @@ pub fn compile_shader(filename: &str, type_: GLenum) -> GLuint {
 #[derive(Debug, Clone)]
 pub struct Program {
     pub name: GLuint,
-    uniforms: HashMap<String, GLint>,
-    attribs: HashMap<String, GLint>,
 }
 
 impl Program {
-    pub fn new(vertex_shader: GLuint, fragment_shader: GLuint, uniforms: Vec<&str>, attribs: Vec<&str>) -> Program {
+    pub fn new(vertex_shader: GLuint, fragment_shader: GLuint) -> Program {
         info!("creating program with vertex shader {} and fragment shader {}", vertex_shader, fragment_shader);
 
         let program;
@@ -121,42 +118,26 @@ impl Program {
 
         info!("successfully created program with id {}", program);
 
-        debug!("fetching uniform locations");
-        let mut uniforms_map: HashMap<String, GLint> = HashMap::new();
-        for u in uniforms {
-            debug!("fetching for uniform {}", u);
-            let location;
-            unsafe { location = gl::GetUniformLocation(program, CString::new(u.as_bytes()).unwrap().as_ptr()); }
-            assert_no_gl_error();
-            assert_ne!(location, -1i32, "uniform {} not found in program", location);
-            debug!("received location {}", location);
-            uniforms_map.insert(u.to_owned(), location);
-        }
-
-        debug!("fetching attribute locations");
-        let mut attribs_map: HashMap<String, GLint> = HashMap::new();
-        for a in attribs {
-            debug!("fetching for attribute {}", a);
-            let location;
-            unsafe { location = gl::GetAttribLocation(program, CString::new(a.as_bytes()).unwrap().as_ptr()); }
-            assert_no_gl_error();
-            assert_ne!(location, -1i32, "attribute {} not found in program", location);
-            debug!("received location {}", location);
-            attribs_map.insert(a.to_owned(), location);
-        }
-
         Program {
             name: program,
-            uniforms: uniforms_map,
-            attribs: attribs_map,
         }
     }
 
     pub fn get_uniform(&self, uniform: &str) -> GLint {
-        *self.uniforms.get(uniform).expect(&format!("unknown uniform {}", uniform))
+        let location;
+        unsafe { location = gl::GetUniformLocation(self.name, CString::new(uniform.as_bytes()).unwrap().as_ptr()); }
+        assert_no_gl_error();
+        assert_ne!(location, -1i32, "uniform {} not found in program", location);
+        debug!("received location {}", location);
+        location
     }
 
     pub fn get_attrib(&self, attrib: &str) -> GLint {
-        *self.attribs.get(attrib).expect(&format!("unknown attrib {}", attrib))
+        let location;
+        unsafe { location = gl::GetAttribLocation(self.name, CString::new(attrib.as_bytes()).unwrap().as_ptr()); }
+        assert_no_gl_error();
+        assert_ne!(location, -1i32, "attribute {} not found in program", location);
+        debug!("received location {}", location);
+        location
     }
 }

@@ -134,16 +134,11 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
 
     // let vs_basic = shaders::compile_shader("./shaders/basic_w_color.vert", gl::VERTEX_SHADER);
     // let fs_basic = shaders::compile_shader("./shaders/given_color.frag", gl::FRAGMENT_SHADER);
-    // let program_basic = shaders::Program::new(vs_basic, fs_basic, vec!["mvp"], vec!["in_Position", "in_FragmentColor"]);
+    // let program_basic = shaders::Program::new(vs_basic, fs_basic);
 
     let vs_phong = shaders::compile_shader("./shaders/phong.vert", gl::VERTEX_SHADER);
     let fs_phong = shaders::compile_shader("./shaders/phong.frag", gl::FRAGMENT_SHADER);
-    let program_phong = shaders::Program::new(
-        vs_phong,
-        fs_phong,
-        vec!["u_MatMvp", "u_MatV", "u_MatM", "u_LightPosition_WorldSpace", "u_LightColor", "u_LightPower"],
-        vec!["in_VertexPosition", "in_VertexNormal", "in_ColorAmbient", "in_ColorDiffuse", "in_ColorSpecular", "in_SpecularExponent"]
-    );
+    let program_phong = shaders::Program::new(vs_phong, fs_phong);
 
     info!("successfully created shaders/program");
 
