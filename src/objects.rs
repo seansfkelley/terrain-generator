@@ -102,6 +102,8 @@ impl <'a> RenderableObject<'a> {
         let m_array = util::arrayify_mat4(model);
         let mvp_array = util::arrayify_mat4(model_view_projection);
         let light_position = [3f32, 4f32, 7f32];
+        let light_color = [1f32, 1f32, 1f32];
+        let light_power = 50f32;
 
         unsafe {
             gl::UseProgram(self.program.name);
@@ -109,6 +111,8 @@ impl <'a> RenderableObject<'a> {
             gl::UniformMatrix4fv(self.program.get_uniform("u_MatV"), 1, gl::FALSE, &*v_array as *const f32);
             gl::UniformMatrix4fv(self.program.get_uniform("u_MatM"), 1, gl::FALSE, &*m_array as *const f32);
             gl::Uniform3f(self.program.get_uniform("u_LightPosition_WorldSpace"), light_position[0], light_position[1], light_position[2]);
+            gl::Uniform3f(self.program.get_uniform("u_LightColor"), light_color[0], light_color[1], light_color[2]);
+            gl::Uniform1f(self.program.get_uniform("u_LightPower"), light_power);
             gl::BindVertexArray(self.vao);
             gl::DrawElements(gl::TRIANGLES, self.triangle_count, gl::UNSIGNED_INT, ptr::null());
         }
