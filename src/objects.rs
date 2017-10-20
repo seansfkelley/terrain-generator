@@ -1,11 +1,13 @@
 use std::vec::Vec;
 use std::mem::size_of;
-use std::ptr;
+use std::{ ptr, path };
 use std::collections::{ HashMap, HashSet };
 use multimap;
 use gl;
 use gl::types::*;
 use glm;
+use image;
+use image::{ GenericImage };
 use num_traits::identities::One;
 use wavefront_obj::{ obj, mtl };
 use util::assert_no_gl_error;
@@ -26,8 +28,17 @@ impl Flattenable for GLfloat {
     }
 }
 
+impl Flattenable for glm::Vec2 {
+    fn component_count()  -> u32 { 2 }
+
+    fn append_components_to(&self, vector: &mut Vec<GLfloat>) {
+        vector.push(self.x);
+        vector.push(self.y);
+    }
+}
+
 impl Flattenable for glm::Vec3 {
-    fn component_count()  -> u32 { 3 }
+    fn component_count() -> u32 { 3 }
 
     fn append_components_to(&self, vector: &mut Vec<GLfloat>) {
         vector.push(self.x);
@@ -37,7 +48,7 @@ impl Flattenable for glm::Vec3 {
 }
 
 impl Flattenable for mtl::Color {
-    fn component_count()  -> u32 { 3 }
+    fn component_count() -> u32 { 3 }
 
     fn append_components_to(&self, vector: &mut Vec<GLfloat>) {
         vector.push(self.r as GLfloat);
@@ -63,32 +74,35 @@ lazy_static! {
 
 static BLACK: mtl::Color = mtl::Color { r: 0.0, g: 0.0, b: 0.0 };
 
-#[derive(Debug)]
 struct RenderableChunk<'a> {
     material: &'a mtl::Material,
+    texture: image::DynamicImage,
     vertices: Vec<glm::Vec3>,
+    uvs: Vec<glm::Vec2>,
     normals: Vec<glm::Vec3>,
     triangles: Vec<obj::Primitive>,
 }
 
 pub struct RenderableObject<'a> {
-    object: obj::Object,
+    mesh: obj::Object,
     material: Option<HashMap<String, mtl::Material>>,
     program: &'a shaders::Program,
     loaded: bool,
     vao: GLuint,
     triangle_count: i32,
+    texture_id: i32,
 }
 
 impl <'a> RenderableObject<'a> {
-    pub fn new(object: obj::Object, material: Option<HashMap<String, mtl::Material>>, program: &shaders::Program) -> RenderableObject {
+    pub fn new(mesh: obj::Object, material: Option<HashMap<String, mtl::Material>>, program: &shaders::Program) -> RenderableObject {
         RenderableObject {
-            object: object,
+            mesh: mesh,
             material: material,
             program: program,
             loaded: false,
             vao: 0,
             triangle_count: 0,
+            texture_id: 0,
         }
     }
 
@@ -113,7 +127,12 @@ impl <'a> RenderableObject<'a> {
             gl::Uniform3f(self.program.get_uniform("u_LightPosition_WorldSpace"), light_position[0], light_position[1], light_position[2]);
             gl::Uniform3f(self.program.get_uniform("u_LightColor"), light_color[0], light_color[1], light_color[2]);
             gl::Uniform1f(self.program.get_uniform("u_LightPower"), light_power);
+            assert_no_gl_error();
+            // TODO: Actually have to get this out of the binding. Something to do with TEXTURE0?
+		    gl::Uniform1i(self.program.get_uniform("u_TextureDiffuse"), 0);
+            assert_no_gl_error();
             gl::BindVertexArray(self.vao);
+            assert_no_gl_error();
             gl::DrawElements(gl::TRIANGLES, self.triangle_count, gl::UNSIGNED_INT, ptr::null());
             assert_no_gl_error();
         }
@@ -121,14 +140,14 @@ impl <'a> RenderableObject<'a> {
 
     fn split_into_renderable_chunks(&self) -> Vec<RenderableChunk> {
         let converted_vertices: Vec<glm::Vec3> = self
-            .object
+            .mesh
             .vertices
             .iter()
             .map(|v| glm::vec3(v.x as f32, v.y as f32, v.z as f32))
             .collect();
 
         let mut vertex_normal_pairs: Vec<(usize, glm::Vec3)> = self
-            .object
+            .mesh
             .geometry
             .iter()
             .flat_map(|g| {
@@ -149,7 +168,6 @@ impl <'a> RenderableObject<'a> {
                         }
                     })
             })
-            // pseudocode
             .collect::<multimap::MultiMap<usize, glm::Vec3>>()
             .iter_all()
             .map(|(v_index, normals)| {
@@ -159,14 +177,14 @@ impl <'a> RenderableObject<'a> {
 
         vertex_normal_pairs.sort_by(|p1, p2| p1.0.cmp(&p2.0));
 
-        // TODO: Sometimes, normals will be givn to us in the input file.
+        // TODO: Sometimes, normals will be given to us in the input file.
         let all_vertex_normals: Vec<glm::Vec3> = vertex_normal_pairs
             .iter()
             .map(|p| p.1)
             .collect();
 
         self
-            .object
+            .mesh
             .geometry
             .iter()
             .map(|g| {
@@ -223,6 +241,38 @@ impl <'a> RenderableObject<'a> {
                     .map(|i| all_vertex_normals[*i])
                     .collect();
 
+                let uvs: Vec<glm::Vec2>;
+                let mut texture: image::DynamicImage;
+
+                match material.uv_map.as_ref() {
+                    Some(texture_name) => {
+                        // TODO: Relative to object file.
+                        texture = image::open(&*(path::Path::new("./objects")).join(texture_name)).unwrap();
+                        uvs = new_to_old_index_mapping
+                            .iter()
+                            .map(|i| {
+                                let t_vertex = self.mesh.tex_vertices[*i];
+                                glm::vec2(t_vertex.u as f32, t_vertex.v as f32)
+                            })
+                            .collect();
+                    },
+                    None => {
+                        uvs = new_to_old_index_mapping
+                            .iter()
+                            .map(|_i| glm::vec2(0f32, 0f32))
+                            .collect();
+                        texture = image::DynamicImage::new_rgb8(1, 1);
+                        texture.put_pixel(0, 0, image::Rgba([
+                            (material.color_diffuse.r * 255f64) as u8,
+                            (material.color_diffuse.g * 255f64) as u8,
+                            (material.color_diffuse.b * 255f64) as u8,
+                            255
+                        ]));
+                    },
+                }
+
+                println!("{:?}", uvs);
+
                 let triangles: Vec<obj::Primitive> = g.shapes
                     .iter()
                     .map(|s| {
@@ -250,7 +300,9 @@ impl <'a> RenderableObject<'a> {
 
                 RenderableChunk {
                     material: material,
+                    texture: texture,
                     vertices: vertices,
+                    uvs: uvs,
                     normals: normals,
                     triangles: triangles,
                 }
@@ -288,6 +340,37 @@ impl <'a> RenderableObject<'a> {
         }
     }
 
+    fn create_texture_buffer(&self, texture: &image::DynamicImage) {
+        let (width, height) = texture.dimensions();
+        unsafe {
+            let mut texture_buffer_name: GLuint = 0;
+            gl::GenTextures(1, &mut texture_buffer_name);
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, texture_buffer_name);
+            gl::TexImage2D(
+                gl::TEXTURE_2D,
+                0, // TODO: mipmap level
+                gl::RGB as GLint, // Typings seem wrong here...
+                width as GLsizei,
+                height as GLsizei,
+                0,
+                gl::RGB,
+                gl::UNSIGNED_BYTE,
+                // Literally no idea if this is right.
+                (*(texture.to_rgb())).as_ptr() as *const _,
+            );
+
+            // TODO: wat
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
+
+            assert_no_gl_error();
+
+            println!("texture ID is {}", texture_buffer_name);
+            // self.texture_id = texture_buffer_name as i32;
+        }
+    }
+
     fn create_element_array_buffer(&self, indices: Vec<u32>) {
         unsafe {
             let mut index_buffer_name: GLuint = 0;
@@ -319,6 +402,7 @@ impl <'a> RenderableObject<'a> {
 
                 let mut all_vertices: Vec<glm::Vec3> = vec![];
                 let mut all_normals: Vec<glm::Vec3> = vec![];
+                let mut all_uvs: Vec<glm::Vec2> = vec![];
                 let mut all_colors_ambient: Vec<mtl::Color> = vec![];
                 let mut all_colors_diffuse: Vec<mtl::Color> = vec![];
                 let mut all_colors_specular: Vec<mtl::Color> = vec![];
@@ -326,10 +410,11 @@ impl <'a> RenderableObject<'a> {
                 let mut indices: Vec<u32> = vec![];
 
                 let mut offset = 0;
-                for c in chunks {
+                for c in &chunks {
                     for i in 0..c.vertices.len() {
                         all_vertices.push(c.vertices[i]);
                         all_normals.push(c.normals[i]);
+                        all_uvs.push(c.uvs[i]);
                         match c.material.illumination {
                             mtl::Illumination::Ambient => {
                                 all_colors_ambient.push(c.material.color_ambient);
@@ -352,8 +437,8 @@ impl <'a> RenderableObject<'a> {
                         }
                     }
 
-                    for t in c.triangles {
-                        match t {
+                    for t in &c.triangles {
+                        match *t {
                             obj::Primitive::Triangle(
                                 (v1, _, _),
                                 (v2, _, _),
@@ -372,10 +457,12 @@ impl <'a> RenderableObject<'a> {
 
                 self.create_array_buffer("in_VertexPosition", all_vertices);
                 self.create_array_buffer("in_VertexNormal", all_normals);
+                self.create_array_buffer("in_VertexUv", all_uvs);
                 self.create_array_buffer("in_ColorAmbient", all_colors_ambient);
                 self.create_array_buffer("in_ColorDiffuse", all_colors_diffuse);
                 self.create_array_buffer("in_ColorSpecular", all_colors_specular);
                 self.create_array_buffer("in_SpecularExponent", all_specular_exponents);
+                self.create_texture_buffer(&chunks[0].texture);
 
                 triangle_count = indices.len() as i32;
                 self.create_element_array_buffer(indices);

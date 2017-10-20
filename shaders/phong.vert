@@ -7,6 +7,7 @@ uniform vec3 u_LightPosition_WorldSpace;
 
 in vec3 in_VertexPosition;
 in vec3 in_VertexNormal;
+in vec2 in_VertexUv;
 in vec3 in_ColorAmbient;
 in vec3 in_ColorDiffuse;
 in vec3 in_ColorSpecular;
@@ -20,6 +21,7 @@ out vec3 out_VertexPosition_WorldSpace;
 out vec3 out_EyeDirection_CameraSpace;
 out vec3 out_LightDirection_CameraSpace;
 out vec3 out_VertexNormal_CameraSpace;
+out vec2 out_VertexUv;
 
 void main() {
     gl_Position = u_MatMvp * vec4(in_VertexPosition, 1.0);
@@ -35,6 +37,7 @@ void main() {
     // N.B.: Not correct if scaling is in use.
     out_VertexNormal_CameraSpace = (u_MatV * u_MatM * vec4(in_VertexNormal, 0)).xyz;
 
+    out_VertexUv = in_VertexUv;
     out_ColorAmbient = in_ColorAmbient;
     out_ColorDiffuse = in_ColorDiffuse;
     out_ColorSpecular = in_ColorSpecular;

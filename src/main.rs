@@ -12,6 +12,7 @@ extern crate wavefront_obj;
 #[macro_use]
 extern crate lazy_static;
 extern crate multimap;
+extern crate image;
 
 mod shaders;
 mod controls;
@@ -113,12 +114,19 @@ fn mapify_mtl(mtl_set: mtl::MtlSet) -> collections::HashMap<String, mtl::Materia
 
 fn load_local_object<'a>(name: &str, program: &'a shaders::Program) -> objects::RenderableObject<'a> {
     let p = path::Path::new("./objects");
+
     let o = obj::parse(file::read_file_contents(&*p.join(name))).unwrap();
-    let m = match o.material_library {
-        Some(mtl_name) => Some(mapify_mtl(mtl::parse(file::read_file_contents(&*p.join(mtl_name))).unwrap())),
-        None => None,
-    };
-    objects::RenderableObject::new(o.objects[1].clone(), m, program)
+    let m = o.material_library.and_then(|mtl_name| Some(mapify_mtl(mtl::parse(file::read_file_contents(&*p.join(mtl_name))).unwrap())));
+
+    for o_prime in o.objects {
+        if o_prime.vertices.len() == 0 {
+            continue
+        } else {
+            return objects::RenderableObject::new(o_prime.clone(), m, program)
+        }
+    }
+
+    panic!("no objects with any verties defined in {}", name);
 }
 
 fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f64, glfw::WindowEvent)>) {
@@ -143,6 +151,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     info!("successfully created shaders/program");
 
     let mut renderables = vec![
+        load_local_object("cube.obj", &program_phong),
         load_local_object("icosahedron.obj", &program_phong),
         load_local_object("dodecahedron.obj", &program_phong),
         load_local_object("shuttle.obj", &program_phong),
@@ -150,7 +159,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     ];
     info!("successfully initialized static data");
 
-    let mut object_to_render = 4;
+    let mut object_to_render = 1;
 
     let mut last_time = glfw.get_time() as f32;
     let mut camera = camera::Camera::new();

@@ -1,0 +1,8 @@
+newmtl Material_ray.png
+Ns 60.0000
+Ka 0.4000 0.4000 0.4000
+Kd 1.0000 1.0000 1.0000
+Ks 0.3000 0.3000 0.3000
+d 1.0
+illum 2
+map_Kd ./uvtemplate.bmp
