@@ -101,9 +101,9 @@ impl <'a> RenderableObject<'a> {
         let v_array = util::arrayify_mat4(view);
         let m_array = util::arrayify_mat4(model);
         let mvp_array = util::arrayify_mat4(model_view_projection);
-        let light_position = [3f32, 4f32, 7f32];
+        let light_position = [3f32, 4f32, 15f32];
         let light_color = [1f32, 1f32, 1f32];
-        let light_power = 50f32;
+        let light_power = 80f32;
 
         unsafe {
             gl::UseProgram(self.program.name);

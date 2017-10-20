@@ -145,15 +145,16 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     let mut renderables = vec![
         load_local_object("icosahedron.obj", &program_phong),
         load_local_object("dodecahedron.obj", &program_phong),
-        load_local_object("shuttle.obj", &program_phong)
+        load_local_object("shuttle.obj", &program_phong),
+        load_local_object("cessna.obj", &program_phong),
     ];
     info!("successfully initialized static data");
 
-    let mut object_to_render = 3;
+    let mut object_to_render = 4;
 
     let mut last_time = glfw.get_time() as f32;
     let mut camera = camera::Camera::new();
-    camera.translate(camera::TranslateDirection::Forward, -2.0);
+    camera.translate(camera::TranslateDirection::Forward, -25.0);
 
     info!("beginning event loop");
     while !window.should_close() {
@@ -167,7 +168,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
         let projection = camera.projection_mat(ASPECT_RATIO);
 
         unsafe {
-            gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+            gl::ClearColor(0.1, 0.1, 0.1, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
             let index_to_render = object_to_render - 1;
             if index_to_render < renderables.len() {
