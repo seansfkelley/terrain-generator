@@ -94,8 +94,7 @@ fn load_obj_file<'a>(path: &path::Path) -> obj::ObjSet {
 fn mapify_mtl(mtl_set: mtl::MtlSet) -> HashMap<String, mtl::Material> {
     let mut map = HashMap::new();
     for m in mtl_set.materials {
-        // TODO: Compiles, but seems bleh. Need to understand borrowing semantics better.
-        map.insert(m.name.clone(), m.clone());
+        map.insert(m.name.clone(), m);
     }
     map
 }
