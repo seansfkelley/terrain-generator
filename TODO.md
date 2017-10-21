@@ -4,7 +4,6 @@ next steps:
   - perhaps creating an intermediate Vertex object that includes all the remapped indices would be easier?
 - figure out why texture on cube is distorted
 - figure out what the meaning of glActiveTexture/TEXTURE0 actually is and how to use it
-- RenderableChunk should maybe be 1:1 with VAO so that it's easier to swap textures?
 - unbind VAOs when doing rendering/binding
 - respect normals specified in .obj file
 - implement normal mapping
