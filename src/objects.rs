@@ -268,6 +268,36 @@ impl <'a> RenderableObject<'a> {
                     .map(|i| vertex_normals[*i])
                     .collect();
 
+                let uvs: Vec<glm::Vec2>;
+                let mut texture: image::DynamicImage;
+
+                match material.uv_map.as_ref() {
+                    Some(texture_name) => {
+                        texture = image::open(p.parent().unwrap().join(texture_name)).unwrap();
+                        uvs = new_to_old_index_mapping
+                            .iter()
+                            .map(|i| {
+                                // TODO: We are assuming this exist iff a texture was specified. Error checking.
+                                let t_vertex = o.tex_vertices[*i];
+                                glm::vec2(t_vertex.u as f32, t_vertex.v as f32)
+                            })
+                            .collect();
+                    },
+                    None => {
+                        uvs = new_to_old_index_mapping
+                            .iter()
+                            .map(|_i| glm::vec2(0f32, 0f32))
+                            .collect();
+                        texture = image::DynamicImage::new_rgb8(1, 1);
+                        texture.put_pixel(0, 0, image::Rgba([
+                            (material.color_diffuse.r * 255f64) as u8,
+                            (material.color_diffuse.g * 255f64) as u8,
+                            (material.color_diffuse.b * 255f64) as u8,
+                            255
+                        ]));
+                    },
+                }
+
                 let indices: Vec<GLuint> = g
                     .shapes
                     .iter()
@@ -283,36 +313,6 @@ impl <'a> RenderableObject<'a> {
                                     old_to_new_index_mapping[&v2] as GLuint,
                                     old_to_new_index_mapping[&v3] as GLuint,
                                 ].into_iter()
-                            },
-                            _ => { panic!("got non-triangle primitive"); },
-                        }
-                    })
-                    .collect();
-
-                // TODO: I think the distortion is because these are sorted differently than the positions.
-                let uvs: Vec<glm::Vec2> = g
-                    .shapes
-                    .iter()
-                    .flat_map(|s| {
-                        match s.primitive {
-                            obj::Primitive::Triangle(
-                                (_, t1, _),
-                                (_, t2, _),
-                                (_, t3, _),
-                            ) => {
-                                vec![t1, t2, t3]
-                                    .into_iter()
-                                    .map(|t| {
-                                        match t {
-                                            Some(index) => {
-                                                let t_vertex = o.tex_vertices[index];
-                                                // TODO: 1 - v?
-                                                glm::vec2(t_vertex.u as f32, t_vertex.v as f32)
-                                            },
-                                            // TODO: Failure mode: an input specifies /some/ texture vertices, but ends up with zeroes elsewhere.
-                                            None => glm::vec2(0f32, 0f32),
-                                        }
-                                    })
                             },
                             _ => { panic!("got non-triangle primitive"); },
                         }
@@ -346,22 +346,6 @@ impl <'a> RenderableObject<'a> {
                             specular_exponents.push(material.specular_coefficient as GLfloat);
                         },
                     }
-                }
-
-                let mut texture: image::DynamicImage;
-                match material.uv_map.as_ref() {
-                    Some(texture_name) => {
-                        texture = image::open(p.parent().unwrap().join(texture_name)).unwrap();
-                    },
-                    None => {
-                        texture = image::DynamicImage::new_rgb8(1, 1);
-                        texture.put_pixel(0, 0, image::Rgba([
-                            (material.color_diffuse.r * 255f64) as u8,
-                            (material.color_diffuse.g * 255f64) as u8,
-                            (material.color_diffuse.b * 255f64) as u8,
-                            255
-                        ]));
-                    },
                 }
 
                 let mut vao = 0;
