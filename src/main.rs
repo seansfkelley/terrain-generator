@@ -21,13 +21,12 @@ mod util;
 mod file;
 mod objects;
 
-use std::{ ptr, path, collections };
+use std::ptr;
 use std::os::raw::{ c_void, c_char };
 use std::ffi::CStr;
 use std::sync::mpsc::Receiver;
 use glfw::Context;
 use gl::types::*;
-use wavefront_obj::{ obj, mtl };
 use util::assert_no_gl_error;
 
 const WIDTH: u32 = 800;
@@ -103,32 +102,6 @@ fn main() {
     render(&mut glfw, &mut window, events);
 }
 
-fn mapify_mtl(mtl_set: mtl::MtlSet) -> collections::HashMap<String, mtl::Material> {
-    let mut map = collections::HashMap::new();
-    for m in mtl_set.materials {
-        // TODO: Compiles, but seems bleh. Need to understand borrowing semantics better.
-        map.insert(m.name.clone(), m.clone());
-    }
-    map
-}
-
-fn load_local_object<'a>(name: &str, program: &'a shaders::Program) -> objects::RenderableObject<'a> {
-    let p = path::Path::new("./objects");
-
-    let o = obj::parse(file::read_file_contents(&*p.join(name))).unwrap();
-    let m = o.material_library.and_then(|mtl_name| Some(mapify_mtl(mtl::parse(file::read_file_contents(&*p.join(mtl_name))).unwrap())));
-
-    for o_prime in o.objects {
-        if o_prime.vertices.len() == 0 {
-            continue
-        } else {
-            return objects::RenderableObject::new(o_prime.clone(), m, program)
-        }
-    }
-
-    panic!("no objects with any verties defined in {}", name);
-}
-
 fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f64, glfw::WindowEvent)>) {
     glfw.poll_events();
     controls::init_window_controls(window);
@@ -151,11 +124,11 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
     info!("successfully created shaders/program");
 
     let mut renderables = vec![
-        load_local_object("cube.obj", &program_phong),
-        load_local_object("icosahedron.obj", &program_phong),
-        load_local_object("dodecahedron.obj", &program_phong),
-        load_local_object("shuttle.obj", &program_phong),
-        load_local_object("cessna.obj", &program_phong),
+        objects::RenderableObject::new("./objects/cube.obj", &program_phong),
+        objects::RenderableObject::new("./objects/icosahedron.obj", &program_phong),
+        objects::RenderableObject::new("./objects/dodecahedron.obj", &program_phong),
+        objects::RenderableObject::new("./objects/shuttle.obj", &program_phong),
+        objects::RenderableObject::new("./objects/cessna.obj", &program_phong),
     ];
     info!("successfully initialized static data");
 

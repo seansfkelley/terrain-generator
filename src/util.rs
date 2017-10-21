@@ -13,7 +13,7 @@ pub fn assert_no_gl_error() {
                 gl::STACK_OVERFLOW => "stack overflow",
                 gl::STACK_UNDERFLOW => "stack underflow",
                 gl::OUT_OF_MEMORY => "out of memory",
-                _ => panic!("unknown error code while handling OpenGL error: {}", error),
+                _ => panic!("unknown error code while handling OpenGL error: 0x{:X}", error),
             };
             panic!(format!("OpenGL error code 0x{:X}: {}", error, name));
         }

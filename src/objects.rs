@@ -11,6 +11,7 @@ use image::{ GenericImage };
 use num_traits::identities::One;
 use wavefront_obj::{ obj, mtl };
 use util::assert_no_gl_error;
+use file;
 
 use shaders;
 use util;
@@ -74,40 +75,44 @@ lazy_static! {
 
 static BLACK: mtl::Color = mtl::Color { r: 0.0, g: 0.0, b: 0.0 };
 
-struct RenderableChunk<'a> {
-    material: &'a mtl::Material,
-    texture: image::DynamicImage,
-    vertices: Vec<glm::Vec3>,
-    uvs: Vec<glm::Vec2>,
-    normals: Vec<glm::Vec3>,
-    triangles: Vec<obj::Primitive>,
+pub struct LoadedMesh {
+    vao: GLuint,
+    texture_name: GLuint,
+    index_count: GLint
 }
 
 pub struct RenderableObject<'a> {
-    mesh: obj::Object,
-    material: Option<HashMap<String, mtl::Material>>,
+    filename: String,
     program: &'a shaders::Program,
-    loaded: bool,
-    vao: GLuint,
-    triangle_count: GLint,
-    texture_id: GLuint,
+    meshes: Option<Vec<LoadedMesh>>,
+}
+
+fn load_obj_file<'a>(path: &path::Path) -> obj::ObjSet {
+    obj::parse(file::read_file_contents(path)).unwrap()
+}
+
+fn mapify_mtl(mtl_set: mtl::MtlSet) -> HashMap<String, mtl::Material> {
+    let mut map = HashMap::new();
+    for m in mtl_set.materials {
+        // TODO: Compiles, but seems bleh. Need to understand borrowing semantics better.
+        map.insert(m.name.clone(), m.clone());
+    }
+    map
 }
 
 impl <'a> RenderableObject<'a> {
-    pub fn new(mesh: obj::Object, material: Option<HashMap<String, mtl::Material>>, program: &shaders::Program) -> RenderableObject {
+    pub fn new(filename: &str, program: &'a shaders::Program) -> RenderableObject<'a> {
         RenderableObject {
-            mesh: mesh,
-            material: material,
+            filename: filename.to_owned(),
             program: program,
-            loaded: false,
-            vao: 0,
-            triangle_count: 0,
-            texture_id: 0,
+            meshes: Option::None,
         }
     }
 
     pub fn render(&mut self, view: glm::Mat4, projection: glm::Mat4) {
-        self.lazy_load_buffers();
+        if self.meshes.is_none() {
+            self.meshes = Some(self.load_meshes());
+        }
 
         let model = glm::Mat4::one();
         let model_view_projection = projection * view * model;
@@ -127,25 +132,46 @@ impl <'a> RenderableObject<'a> {
             gl::Uniform3f(self.program.get_uniform("u_LightPosition_WorldSpace"), light_position[0], light_position[1], light_position[2]);
             gl::Uniform3f(self.program.get_uniform("u_LightColor"), light_color[0], light_color[1], light_color[2]);
             gl::Uniform1f(self.program.get_uniform("u_LightPower"), light_power);
-            gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
-		    gl::Uniform1i(self.program.get_uniform("u_TextureDiffuse"), 0);
-            gl::BindVertexArray(self.vao);
-            gl::DrawElements(gl::TRIANGLES, self.triangle_count, gl::UNSIGNED_INT, ptr::null());
             assert_no_gl_error();
+
+            for m in self.meshes.as_ref().unwrap() {
+                gl::ActiveTexture(gl::TEXTURE0);
+                gl::BindTexture(gl::TEXTURE_2D, m.texture_name);
+                gl::Uniform1i(self.program.get_uniform("u_TextureDiffuse"), 0);
+                gl::BindVertexArray(m.vao);
+                gl::DrawElements(gl::TRIANGLES, m.index_count, gl::UNSIGNED_INT, ptr::null());
+                assert_no_gl_error();
+            }
+
+            // TODO: Cleanup: unbind program/textures/VAOs/etc.
         }
     }
 
-    fn split_into_renderable_chunks(&self) -> Vec<RenderableChunk> {
-        let converted_vertices: Vec<glm::Vec3> = self
-            .mesh
+    fn load_meshes(&self) -> Vec<LoadedMesh> {
+        let p = path::Path::new(&self.filename);
+
+        let obj_set = load_obj_file(p);
+        let materials = obj_set.material_library
+            .and_then(|mtl_name| Some(mapify_mtl(mtl::parse(file::read_file_contents(&*p.parent().unwrap().join(mtl_name))).unwrap())));
+
+        obj_set
+            .objects
+            .into_iter()
+            .filter(|o| o.vertices.len() > 0)
+            .flat_map(|o| {
+                self.load_mesh_for_object(&p, o, &materials).into_iter()
+            })
+            .collect::<Vec<LoadedMesh>>()
+    }
+
+    fn load_mesh_for_object(&self, p: &path::Path, o: obj::Object, materials: &Option<HashMap<String, mtl::Material>>) -> Vec<LoadedMesh> {
+        let vertex_positions: Vec<glm::Vec3> = o
             .vertices
             .iter()
             .map(|v| glm::vec3(v.x as f32, v.y as f32, v.z as f32))
             .collect();
 
-        let mut vertex_normal_pairs: Vec<(usize, glm::Vec3)> = self
-            .mesh
+        let mut vertex_normal_pairs: Vec<(usize, glm::Vec3)> = o
             .geometry
             .iter()
             .flat_map(|g| {
@@ -159,7 +185,10 @@ impl <'a> RenderableObject<'a> {
                                 (v2, _, _),
                                 (v3, _, _),
                             ) => {
-                                let normal = glm::normalize(glm::cross(converted_vertices[v2] - converted_vertices[v1], converted_vertices[v3] - converted_vertices[v1]));
+                                // TODO: Normalize here, or later?
+                                let normal = glm::cross(
+                                    vertex_positions[v2] - vertex_positions[v1],
+                                    vertex_positions[v3] - vertex_positions[v1]);
                                 vec![(v1, normal), (v2, normal), (v3, normal)]
                             },
                             _ => { panic!("got non-triangle primitive"); },
@@ -169,27 +198,28 @@ impl <'a> RenderableObject<'a> {
             .collect::<multimap::MultiMap<usize, glm::Vec3>>()
             .iter_all()
             .map(|(v_index, normals)| {
-                (*v_index, normals.iter().fold(glm::vec3(0.0, 0.0, 0.0), |acc, &n| acc + n))
+                (*v_index, glm::normalize(normals.iter().fold(glm::vec3(0.0, 0.0, 0.0), |acc, &n| acc + n)))
             })
             .collect();
 
+        // TODO: A trait for sortable iterators. Surprised this doesn't exist already.
         vertex_normal_pairs.sort_by(|p1, p2| p1.0.cmp(&p2.0));
 
         // TODO: Sometimes, normals will be given to us in the input file.
-        let all_vertex_normals: Vec<glm::Vec3> = vertex_normal_pairs
+        // TODO: Smoothing groups, which probably have to be applied across objects...?
+        let vertex_normals: Vec<glm::Vec3> = vertex_normal_pairs
             .iter()
             .map(|p| p.1)
             .collect();
 
-        self
-            .mesh
+        o
             .geometry
             .iter()
             .map(|g| {
                 let material;
                 // Nested options are pretty sad. :/
-                if self.material.is_some() && g.material_name.is_some() {
-                    material = self.material.as_ref().unwrap().get(g.material_name.as_ref().unwrap()).unwrap_or(&DEFAULT_MATERIAL);
+                if materials.is_some() && g.material_name.is_some() {
+                    material = materials.as_ref().unwrap().get(g.material_name.as_ref().unwrap()).unwrap_or(&DEFAULT_MATERIAL);
                 } else {
                     material = &DEFAULT_MATERIAL;
                 }
@@ -231,12 +261,12 @@ impl <'a> RenderableObject<'a> {
 
                 let vertices: Vec<glm::Vec3> = new_to_old_index_mapping
                     .iter()
-                    .map(|i| converted_vertices[*i])
+                    .map(|i| vertex_positions[*i])
                     .collect();
 
                 let normals: Vec<glm::Vec3> = new_to_old_index_mapping
                     .iter()
-                    .map(|i| all_vertex_normals[*i])
+                    .map(|i| vertex_normals[*i])
                     .collect();
 
                 let uvs: Vec<glm::Vec2>;
@@ -244,12 +274,12 @@ impl <'a> RenderableObject<'a> {
 
                 match material.uv_map.as_ref() {
                     Some(texture_name) => {
-                        // TODO: Relative to object file.
-                        texture = image::open(&*(path::Path::new("./objects")).join(texture_name)).unwrap();
+                        texture = image::open(p.parent().unwrap().join(texture_name)).unwrap();
                         uvs = new_to_old_index_mapping
                             .iter()
                             .map(|i| {
-                                let t_vertex = self.mesh.tex_vertices[*i];
+                                // TODO: We are assuming this exist iff a texture was specified. Error checking.
+                                let t_vertex = o.tex_vertices[*i];
                                 glm::vec2(t_vertex.u as f32, t_vertex.v as f32)
                             })
                             .collect();
@@ -269,38 +299,85 @@ impl <'a> RenderableObject<'a> {
                     },
                 }
 
-                let triangles: Vec<obj::Primitive> = g.shapes
+                let indices: Vec<GLuint> = g
+                    .shapes
                     .iter()
-                    .map(|s| {
+                    .flat_map(|s| {
                         match s.primitive {
                             obj::Primitive::Triangle(
-                                (v1, t1, n1),
-                                (v2, t2, n2),
-                                (v3, t3, n3),
+                                (v1, _, _),
+                                (v2, _, _),
+                                (v3, _, _),
                             ) => {
-                                let (new_v1, new_v2, new_v3) = (
-                                    old_to_new_index_mapping[&v1],
-                                    old_to_new_index_mapping[&v2],
-                                    old_to_new_index_mapping[&v3],
-                                );
-                                obj::Primitive::Triangle {
-                                    0: (new_v1, t1, n1),
-                                    1: (new_v2, t2, n2),
-                                    2: (new_v3, t3, n3),
-                                }
+                                vec![
+                                    old_to_new_index_mapping[&v1] as GLuint,
+                                    old_to_new_index_mapping[&v2] as GLuint,
+                                    old_to_new_index_mapping[&v3] as GLuint,
+                                ].into_iter()
                             },
                             _ => { panic!("got non-triangle primitive"); },
                         }
                     })
                     .collect();
 
-                RenderableChunk {
-                    material: material,
-                    texture: texture,
-                    vertices: vertices,
-                    uvs: uvs,
-                    normals: normals,
-                    triangles: triangles,
+                let mut colors_ambient: Vec<mtl::Color> = vec![];
+                let mut colors_diffuse: Vec<mtl::Color> = vec![];
+                let mut colors_specular: Vec<mtl::Color> = vec![];
+                let mut specular_exponents: Vec<GLfloat> = vec![];
+
+                // TODO: Can do some kind of "repeat" instead of this silliness?
+                for _ in 0..vertices.len() {
+                    match material.illumination {
+                        mtl::Illumination::Ambient => {
+                            colors_ambient.push(material.color_ambient);
+                            colors_diffuse.push(BLACK);
+                            colors_specular.push(BLACK);
+                            specular_exponents.push(1.0);
+                        },
+                        mtl::Illumination::AmbientDiffuse => {
+                            colors_ambient.push(material.color_ambient);
+                            colors_diffuse.push(material.color_diffuse);
+                            colors_specular.push(BLACK);
+                            specular_exponents.push(1.0);
+                        },
+                        mtl::Illumination::AmbientDiffuseSpecular => {
+                            colors_ambient.push(material.color_ambient);
+                            colors_diffuse.push(material.color_diffuse);
+                            colors_specular.push(material.color_specular);
+                            specular_exponents.push(material.specular_coefficient as GLfloat);
+                        },
+                    }
+                }
+
+                let mut vao = 0;
+                unsafe {
+                    gl::GenVertexArrays(1, &mut vao);
+                    gl::BindVertexArray(vao);
+                    assert_no_gl_error();
+                }
+
+                self.create_array_buffer("in_VertexPosition", vertices);
+                self.create_array_buffer("in_VertexNormal", normals);
+                self.create_array_buffer("in_VertexUv", uvs);
+                self.create_array_buffer("in_ColorAmbient", colors_ambient);
+                self.create_array_buffer("in_ColorDiffuse", colors_diffuse);
+                self.create_array_buffer("in_ColorSpecular", colors_specular);
+                self.create_array_buffer("in_SpecularExponent", specular_exponents);
+
+                let index_count = indices.len();
+                self.create_element_array_buffer(indices);
+
+                unsafe {
+                    // TODO: Verify that this is "unbind".
+                    gl::BindVertexArray(0);
+                }
+
+                let texture_name = self.create_texture_buffer(texture);
+
+                LoadedMesh {
+                    vao: vao,
+                    texture_name: texture_name,
+                    index_count: index_count as GLint,
                 }
             })
             .collect()
@@ -336,12 +413,11 @@ impl <'a> RenderableObject<'a> {
         }
     }
 
-    fn create_texture_buffer(&self, texture: &image::DynamicImage) -> GLuint {
+    fn create_texture_buffer(&self, texture: image::DynamicImage) -> GLuint {
         let (width, height) = texture.dimensions();
         unsafe {
             let mut texture_buffer_name: GLuint = 0;
             gl::GenTextures(1, &mut texture_buffer_name);
-            // TODO: What does this actually mean and where do I have to refer to it?
             gl::ActiveTexture(gl::TEXTURE0);
             gl::BindTexture(gl::TEXTURE_2D, texture_buffer_name);
             gl::TexImage2D(
@@ -378,95 +454,6 @@ impl <'a> RenderableObject<'a> {
                 indices.as_ptr() as *const _,
                 gl::STATIC_DRAW);
             assert_no_gl_error();
-        }
-    }
-
-    fn lazy_load_buffers(&mut self) {
-        if !self.loaded {
-            self.loaded = true;
-
-            unsafe {
-                gl::GenVertexArrays(1, &mut self.vao);
-                gl::BindVertexArray(self.vao);
-                assert_no_gl_error();
-            }
-
-            let triangle_count: GLint;
-            let texture_id: GLuint;
-
-            {
-                let chunks = self.split_into_renderable_chunks();
-
-                let mut all_vertices: Vec<glm::Vec3> = vec![];
-                let mut all_normals: Vec<glm::Vec3> = vec![];
-                let mut all_uvs: Vec<glm::Vec2> = vec![];
-                let mut all_colors_ambient: Vec<mtl::Color> = vec![];
-                let mut all_colors_diffuse: Vec<mtl::Color> = vec![];
-                let mut all_colors_specular: Vec<mtl::Color> = vec![];
-                let mut all_specular_exponents: Vec<GLfloat> = vec![];
-                let mut indices: Vec<u32> = vec![];
-
-                let mut offset = 0;
-                for c in &chunks {
-                    for i in 0..c.vertices.len() {
-                        all_vertices.push(c.vertices[i]);
-                        all_normals.push(c.normals[i]);
-                        all_uvs.push(c.uvs[i]);
-                        match c.material.illumination {
-                            mtl::Illumination::Ambient => {
-                                all_colors_ambient.push(c.material.color_ambient);
-                                all_colors_diffuse.push(BLACK);
-                                all_colors_specular.push(BLACK);
-                                all_specular_exponents.push(1.0);
-                            },
-                            mtl::Illumination::AmbientDiffuse => {
-                                all_colors_ambient.push(c.material.color_ambient);
-                                all_colors_diffuse.push(c.material.color_diffuse);
-                                all_colors_specular.push(BLACK);
-                                all_specular_exponents.push(1.0);
-                            },
-                            mtl::Illumination::AmbientDiffuseSpecular => {
-                                all_colors_ambient.push(c.material.color_ambient);
-                                all_colors_diffuse.push(c.material.color_diffuse);
-                                all_colors_specular.push(c.material.color_specular);
-                                all_specular_exponents.push(c.material.specular_coefficient as GLfloat);
-                            },
-                        }
-                    }
-
-                    for t in &c.triangles {
-                        match *t {
-                            obj::Primitive::Triangle(
-                                (v1, _, _),
-                                (v2, _, _),
-                                (v3, _, _),
-                            ) => {
-                                indices.push(v1 as u32 + offset);
-                                indices.push(v2 as u32 + offset);
-                                indices.push(v3 as u32 + offset);
-                            },
-                            _ => { panic!("unexpected non-triangle in triangle list"); },
-                        }
-                    }
-
-                    offset += c.vertices.len() as u32;
-                }
-
-                self.create_array_buffer("in_VertexPosition", all_vertices);
-                self.create_array_buffer("in_VertexNormal", all_normals);
-                self.create_array_buffer("in_VertexUv", all_uvs);
-                self.create_array_buffer("in_ColorAmbient", all_colors_ambient);
-                self.create_array_buffer("in_ColorDiffuse", all_colors_diffuse);
-                self.create_array_buffer("in_ColorSpecular", all_colors_specular);
-                self.create_array_buffer("in_SpecularExponent", all_specular_exponents);
-                texture_id = self.create_texture_buffer(&chunks[0].texture);
-
-                triangle_count = indices.len() as GLint;
-                self.create_element_array_buffer(indices);
-            }
-
-            self.texture_id = texture_id;
-            self.triangle_count = triangle_count;
         }
     }
 }
