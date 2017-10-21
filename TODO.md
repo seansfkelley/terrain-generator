@@ -1,13 +1,10 @@
 next steps:
 
-- clone texture coordinates to match cloned vertex coordinates
+- find more textured test material
+  - verify if there is any distortion
+- clone texture coordinates to match cloned vertex coordinates (?)
   - perhaps creating an intermediate Vertex object that includes all the remapped indices would be easier?
-- figure out why texture on cube is distorted
-  - I think htis is because we're using the same indices for positions as for uv, which is incorrect, and fetching the wrong uv coords
-  - or possibly the obj and texture files don't agree, since they're from different places...
-  - or or it's because we're supposed to be cloning vertices if they are ever mentioned twice with different uv
-- figure out what the meaning of glActiveTexture/TEXTURE0 actually is and how to use it
-- unbind VAOs when doing rendering/binding
+- unbind VAOs, etc., when doing rendering/binding
 - respect normals specified in .obj file
 - implement normal mapping
 - implement debug mode (render normals, etc.)
