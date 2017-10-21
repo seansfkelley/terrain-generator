@@ -306,6 +306,7 @@ impl <'a> RenderableObject<'a> {
                                         match t {
                                             Some(index) => {
                                                 let t_vertex = o.tex_vertices[index];
+                                                // TODO: 1 - v?
                                                 glm::vec2(t_vertex.u as f32, t_vertex.v as f32)
                                             },
                                             // TODO: Failure mode: an input specifies /some/ texture vertices, but ends up with zeroes elsewhere.

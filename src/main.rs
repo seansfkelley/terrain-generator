@@ -125,6 +125,7 @@ fn render(glfw: &mut glfw::Glfw, window: &mut glfw::Window, events: Receiver<(f6
 
     let mut renderables = vec![
         objects::RenderableObject::new("./objects/cube.obj", &program_phong),
+        objects::RenderableObject::new("./objects/cube-2.obj", &program_phong),
         objects::RenderableObject::new("./objects/icosahedron.obj", &program_phong),
         objects::RenderableObject::new("./objects/dodecahedron.obj", &program_phong),
         objects::RenderableObject::new("./objects/shuttle.obj", &program_phong),
