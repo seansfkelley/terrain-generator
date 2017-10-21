@@ -89,8 +89,8 @@ pub struct RenderableObject<'a> {
     program: &'a shaders::Program,
     loaded: bool,
     vao: GLuint,
-    triangle_count: i32,
-    texture_id: i32,
+    triangle_count: GLint,
+    texture_id: GLuint,
 }
 
 impl <'a> RenderableObject<'a> {
@@ -127,8 +127,8 @@ impl <'a> RenderableObject<'a> {
             gl::Uniform3f(self.program.get_uniform("u_LightPosition_WorldSpace"), light_position[0], light_position[1], light_position[2]);
             gl::Uniform3f(self.program.get_uniform("u_LightColor"), light_color[0], light_color[1], light_color[2]);
             gl::Uniform1f(self.program.get_uniform("u_LightPower"), light_power);
-            // TODO: Actually have to get this out of the binding. Something to do with TEXTURE0?
-            // Note that this blows up if you give it TEXTURE0, so, you know, wat.
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
 		    gl::Uniform1i(self.program.get_uniform("u_TextureDiffuse"), 0);
             gl::BindVertexArray(self.vao);
             gl::DrawElements(gl::TRIANGLES, self.triangle_count, gl::UNSIGNED_INT, ptr::null());
@@ -336,7 +336,7 @@ impl <'a> RenderableObject<'a> {
         }
     }
 
-    fn create_texture_buffer(&self, texture: &image::DynamicImage) {
+    fn create_texture_buffer(&self, texture: &image::DynamicImage) -> GLuint {
         let (width, height) = texture.dimensions();
         unsafe {
             let mut texture_buffer_name: GLuint = 0;
@@ -363,8 +363,7 @@ impl <'a> RenderableObject<'a> {
 
             assert_no_gl_error();
 
-            println!("texture ID is {}", texture_buffer_name);
-            // self.texture_id = texture_buffer_name as i32;
+            texture_buffer_name
         }
     }
 
@@ -392,7 +391,8 @@ impl <'a> RenderableObject<'a> {
                 assert_no_gl_error();
             }
 
-            let triangle_count: i32;
+            let triangle_count: GLint;
+            let texture_id: GLuint;
 
             {
                 let chunks = self.split_into_renderable_chunks();
@@ -459,12 +459,13 @@ impl <'a> RenderableObject<'a> {
                 self.create_array_buffer("in_ColorDiffuse", all_colors_diffuse);
                 self.create_array_buffer("in_ColorSpecular", all_colors_specular);
                 self.create_array_buffer("in_SpecularExponent", all_specular_exponents);
-                self.create_texture_buffer(&chunks[0].texture);
+                texture_id = self.create_texture_buffer(&chunks[0].texture);
 
-                triangle_count = indices.len() as i32;
+                triangle_count = indices.len() as GLint;
                 self.create_element_array_buffer(indices);
             }
 
+            self.texture_id = texture_id;
             self.triangle_count = triangle_count;
         }
     }
